@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#6ba3d4">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Pooku">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="pooku.png" type="image/svg+xml">
+<link rel="apple-touch-icon" href="pooku.png">
+<title>Pooku - Login</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --pink:#f2bdd0;--pink-deep:#d4789c;--pink-soft:#fdf2f7;
+  --lav:#cfc3ee;--lav-deep:#9478cc;--lav-soft:#f4f0fb;
+  --mint:#b2ddc8;--mint-deep:#5aaa84;--mint-soft:#edf8f3;
+  --peach:#f7d4b0;--peach-deep:#e0956a;
+  --cream:#fdf8f2;--text:#2e2035;--muted:#8a7898;--white:#ffffff;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: linear-gradient(135deg, #fdf2f7 0%, #f4f0fb 50%, #edf8f3 100%);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.container {
+  width: 100%;
+  max-width: 420px;
+}
+
+.card {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 24px;
+  padding: 2.5rem;
+  box-shadow: 0 8px 32px rgba(150, 100, 180, 0.15);
+  border: 1px solid rgba(207, 195, 238, 0.3);
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.logo {
+  font-size: 3.5rem;
+  margin-bottom: 1rem;
+  display: block;
+}
+
+.header h1 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 2rem;
+  color: var(--text);
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+.header p {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.form-group {
+  margin-bottom: 1.2rem;
+}
+
+.form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 0.6rem;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1.5px solid var(--lav);
+  border-radius: 12px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 15px;
+  color: var(--text);
+  outline: none;
+  transition: all 0.2s;
+  background: var(--white);
+}
+
+.form-group input:focus {
+  border-color: var(--lav-deep);
+  box-shadow: 0 0 0 3px rgba(148, 120, 204, 0.1);
+}
+
+.error-message {
+  color: #e07070;
+  font-size: 12px;
+  margin-top: 0.4rem;
+  display: none;
+}
+
+.form-group.error input {
+  border-color: #e07070;
+}
+
+.form-group.error .error-message {
+  display: block;
+}
+
+.submit-btn {
+  width: 100%;
+  padding: 12px 24px;
+  background: linear-gradient(135deg, var(--lav-deep) 0%, var(--pink-deep) 100%);
+  color: white;
+  border: none;
+  border-radius: 50px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-family: 'DM Sans', sans-serif;
+  margin-top: 0.5rem;
+}
+
+.submit-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(148, 120, 204, 0.3);
+}
+
+.submit-btn:active {
+  transform: translateY(0);
+}
+
+.toggle-form {
+  text-align: center;
+  margin-top: 1.5rem;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.toggle-form a {
+  color: var(--lav-deep);
+  text-decoration: none;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.toggle-form a:hover {
+  text-decoration: underline;
+}
+
+.tab-buttons {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 2rem;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 10px;
+  border: 1.5px solid var(--lav);
+  background: var(--white);
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: var(--muted);
+  font-family: 'DM Sans', sans-serif;
+}
+
+.tab-btn.active {
+  background: var(--lav-soft);
+  border-color: var(--lav-deep);
+  color: var(--lav-deep);
+}
+
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+.toast {
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--text);
+  color: white;
+  padding: 12px 24px;
+  border-radius: 50px;
+  font-size: 14px;
+  z-index: 500;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+  white-space: nowrap;
+}
+
+.toast.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.loading {
+  display: none;
+}
+
+.submit-btn.loading {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+@media (max-width: 480px) {
+  .card {
+    padding: 2rem;
+  }
+
+  .header h1 {
+    font-size: 1.6rem;
+  }
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="card">
+    <div class="header">
+      <span class="logo">🌸</span>
+      <h1>Habit Tracker</h1>
+      <p>Build better habits, one day at a time</p>
+    </div>
+
+    <div class="tab-buttons">
+      <button class="tab-btn active" onclick="switchTab('login')">Login</button>
+      <button class="tab-btn" onclick="switchTab('register')">Register</button>
+    </div>
+
+    <!-- LOGIN FORM -->
+    <form class="tab-content active" id="login-form" onsubmit="handleLogin(event)">
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" id="login-username" placeholder="Enter your username" required>
+        <div class="error-message" id="login-username-error"></div>
+      </div>
+
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="login-password" placeholder="Enter your password" required>
+        <div class="error-message" id="login-password-error"></div>
+      </div>
+
+      <button type="submit" class="submit-btn" id="login-btn">Login 🚪</button>
+    </form>
+
+    <!-- REGISTER FORM -->
+    <form class="tab-content" id="register-form" onsubmit="handleRegister(event)">
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" id="register-username" placeholder="Create a username" required>
+        <div class="error-message" id="register-username-error"></div>
+      </div>
+
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="register-email" placeholder="your@email.com" required>
+        <div class="error-message" id="register-email-error"></div>
+      </div>
+
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="register-password" placeholder="At least 6 characters" required minlength="6">
+        <div class="error-message" id="register-password-error"></div>
+      </div>
+
+      <div class="form-group">
+        <label>Confirm Password</label>
+        <input type="password" id="register-confirm-password" placeholder="Confirm your password" required>
+        <div class="error-message" id="register-confirm-error"></div>
+      </div>
+
+      <button type="submit" class="submit-btn" id="register-btn">Create Account ✨</button>
+    </form>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API_URL = 'http://localhost:5000/api';
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+  
+  if (tab === 'login') {
+    document.querySelectorAll('.tab-btn')[0].classList.add('active');
+    document.getElementById('login-form').classList.add('active');
+  } else {
+    document.querySelectorAll('.tab-btn')[1].classList.add('active');
+    document.getElementById('register-form').classList.add('active');
+  }
+}
+
+function showToast(message, isError = false) {
+  const toast = document.getElementById('toast');
+  toast.textContent = message;
+  toast.style.background = isError ? '#e07070' : 'var(--text)';
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+function clearErrors() {
+  document.querySelectorAll('.form-group').forEach(group => {
+    group.classList.remove('error');
+  });
+  document.querySelectorAll('.error-message').forEach(msg => {
+    msg.textContent = '';
+  });
+}
+
+function showError(fieldId, message) {
+  const field = document.getElementById(fieldId);
+  const errorElement = document.getElementById(fieldId + '-error');
+  field.parentElement.classList.add('error');
+  errorElement.textContent = message;
+}
+
+async function handleLogin(event) {
+  event.preventDefault();
+  clearErrors();
+
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  const btn = document.getElementById('login-btn');
+
+  if (!username || !password) {
+    showToast('Please fill in all fields', true);
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Logging in...';
+
+  try {
+    const response = await fetch(`${API_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      if (data.errors) {
+        data.errors.forEach(error => {
+          showError('login-' + error.param, error.msg);
+        });
+      } else {
+        showToast(data.error || 'Login failed', true);
+      }
+    } else {
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('userId', data.userId);
+      localStorage.setItem('username', data.username);
+      showToast('Login successful! 🌸');
+      setTimeout(() => {
+        window.location.href = 'tracker.html';
+      }, 500);
+    }
+  } catch (error) {
+    console.error('Login error:', error);
+    showToast('Connection error. Make sure the backend is running on http://localhost:5000', true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Login 🚪';
+  }
+}
+
+async function handleRegister(event) {
+  event.preventDefault();
+  clearErrors();
+
+  const username = document.getElementById('register-username').value.trim();
+  const email = document.getElementById('register-email').value.trim();
+  const password = document.getElementById('register-password').value;
+  const confirmPassword = document.getElementById('register-confirm-password').value;
+  const btn = document.getElementById('register-btn');
+
+  if (!username || !email || !password || !confirmPassword) {
+    showToast('Please fill in all fields', true);
+    return;
+  }
+
+  if (password !== confirmPassword) {
+    showError('register-confirm-password', 'Passwords do not match');
+    return;
+  }
+
+  if (password.length < 6) {
+    showError('register-password', 'Password must be at least 6 characters');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Creating account...';
+
+  try {
+    const response = await fetch(`${API_URL}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, email, password })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      if (data.errors) {
+        data.errors.forEach(error => {
+          showError('register-' + error.param, error.msg);
+        });
+      } else {
+        showToast(data.error || 'Registration failed', true);
+      }
+    } else {
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('userId', data.userId);
+      localStorage.setItem('username', data.username);
+      showToast('Account created successfully! 🌸');
+      setTimeout(() => {
+        window.location.href = 'tracker.html';
+      }, 500);
+    }
+  } catch (error) {
+    console.error('Register error:', error);
+    showToast('Connection error. Make sure the backend is running on http://localhost:5000', true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Create Account ✨';
+  }
+}
+
+// Check if already logged in
+window.addEventListener('load', () => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    window.location.href = 'tracker.html';
+  }
+});
+</script>
+
+</body>
+</html>

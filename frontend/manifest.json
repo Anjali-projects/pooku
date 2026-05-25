@@ -1,0 +1,44 @@
+{
+  "name": "Pooku - Habit Tracker",
+  "short_name": "Pooku",
+  "description": "A beautiful, multi-user habit tracking app with advanced analytics and smart reminders",
+  "start_url": "/tracker.html",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f5f7fa",
+  "theme_color": "#6ba3d4",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "pooku.png",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "pooku.png",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "pooku.png",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["productivity", "health"],
+  "screenshots": [
+    {
+      "src": "pooku.png",
+      "sizes": "540x720",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "pooku.png",
+      "sizes": "1080x1440",
+      "type": "image/svg+xml"
+    }
+  ]
+}
