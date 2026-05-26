@@ -437,7 +437,7 @@ async function handleLogin(event) {
     }
   } catch (error) {
     console.error('Login error:', error);
-    showToast('Connection error. Make sure the backend is running on http://localhost:5000', true);
+    showToast('Connection error. Unable to reach the server.', true);
   } finally {
     btn.disabled = false;
     btn.textContent = 'Login';
@@ -501,7 +501,7 @@ async function handleRegister(event) {
     }
   } catch (error) {
     console.error('Register error:', error);
-    showToast('Connection error. Make sure the backend is running on http://localhost:5000', true);
+    showToast('Connection error. Unable to reach the server.', true);
   } finally {
     btn.disabled = false;
     btn.textContent = 'Create Account';
