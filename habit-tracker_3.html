@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anjali's Habit Tracker 🌸</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --pink:#f2bdd0;--pink-deep:#d4789c;--pink-soft:#fdf2f7;
+  --lav:#cfc3ee;--lav-deep:#9478cc;--lav-soft:#f4f0fb;
+  --mint:#b2ddc8;--mint-deep:#5aaa84;--mint-soft:#edf8f3;
+  --peach:#f7d4b0;--peach-deep:#e0956a;
+  --cream:#fdf8f2;--text:#2e2035;--muted:#8a7898;--white:#ffffff;
+  --r:18px;--shadow:0 2px 20px rgba(150,100,160,0.08);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--text);min-height:100vh;overflow-x:hidden;}
+
+/* LOADING */
+#loading-screen{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;background:linear-gradient(135deg,#fdf2f7,#f4f0fb,#edf8f3);}
+.loader-flower{font-size:3rem;animation:spin 2s linear infinite;}
+@keyframes spin{0%{transform:rotate(0deg) scale(1);}50%{transform:rotate(180deg) scale(1.1);}100%{transform:rotate(360deg) scale(1);}}
+#loading-screen p{font-size:14px;color:var(--muted);}
+
+/* HERO */
+.hero{position:relative;height:230px;overflow:hidden;}
+.hero-img{width:100%;height:100%;object-fit:cover;opacity:0.6;}
+.hero-overlay{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(253,242,247,0.1) 0%,rgba(253,248,242,0.88) 100%);}
+.hero-text{position:absolute;bottom:1.5rem;left:2rem;}
+.hero-text h1{font-family:'Cormorant Garamond',serif;font-size:2.3rem;font-weight:500;color:var(--text);line-height:1.2;}
+.hero-text h1 em{font-style:italic;color:var(--lav-deep);}
+.hero-text p{font-size:13px;color:var(--muted);margin-top:4px;}
+.hero-notif{position:absolute;top:1rem;right:1rem;}
+.notif-btn{background:rgba(255,255,255,0.88);backdrop-filter:blur(8px);border:1px solid var(--pink);border-radius:50px;padding:7px 16px;font-size:12px;font-weight:500;color:var(--pink-deep);cursor:pointer;transition:all .2s;font-family:'DM Sans',sans-serif;}
+.notif-btn:hover,.notif-btn.on{background:var(--pink-deep);color:white;border-color:var(--pink-deep);}
+
+/* NAV */
+nav{display:flex;gap:4px;background:rgba(255,255,255,0.88);backdrop-filter:blur(12px);border-bottom:1px solid rgba(207,195,238,0.3);padding:10px 1.5rem;position:sticky;top:0;z-index:100;justify-content:center;}
+.nav-tab{padding:7px 22px;border-radius:50px;font-size:13px;font-weight:500;cursor:pointer;border:none;background:transparent;color:var(--muted);font-family:'DM Sans',sans-serif;transition:all .2s;}
+.nav-tab.active{background:var(--lav-soft);color:var(--lav-deep);box-shadow:0 1px 6px rgba(148,120,204,0.15);}
+
+/* SYNC BAR */
+.sync-bar{display:flex;align-items:center;justify-content:center;gap:6px;padding:7px;font-size:11px;color:var(--muted);}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:#ccc;transition:background .3s;}
+.sync-dot.green{background:var(--mint-deep);}
+.sync-dot.orange{background:var(--peach-deep);}
+.sync-dot.red{background:#e07070;}
+
+main{max-width:680px;margin:0 auto;padding:1.5rem 1rem 4rem;}
+.view{display:none;animation:fadeIn .3s ease;}
+.view.active{display:block;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+
+/* INSPO CARD */
+.inspo-card{border-radius:var(--r);overflow:hidden;height:160px;position:relative;margin-bottom:1.4rem;}
+.inspo-card img{width:100%;height:100%;object-fit:cover;}
+.inspo-overlay{position:absolute;inset:0;background:linear-gradient(135deg,rgba(148,120,204,0.52),rgba(212,120,156,0.42));display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;}
+.inspo-quote{font-family:'Cormorant Garamond',serif;font-size:1.35rem;font-style:italic;color:white;text-align:center;padding:0 2rem;text-shadow:0 1px 8px rgba(0,0,0,0.18);line-height:1.4;}
+.inspo-author{font-size:11px;color:rgba(255,255,255,0.82);letter-spacing:.05em;}
+
+/* PROGRESS RING */
+.progress-banner{background:var(--white);border-radius:var(--r);padding:1.2rem 1.4rem;margin-bottom:1.2rem;display:flex;align-items:center;gap:1.2rem;box-shadow:var(--shadow);border:1px solid rgba(207,195,238,0.3);}
+.progress-circle{width:68px;height:68px;flex-shrink:0;position:relative;display:flex;align-items:center;justify-content:center;}
+.progress-circle svg{position:absolute;top:0;left:0;transform:rotate(-90deg);}
+.pct{font-size:14px;font-weight:500;color:var(--text);z-index:1;}
+.progress-text h3{font-size:15px;font-weight:500;}
+.progress-text p{font-size:12px;color:var(--muted);margin-top:3px;}
+
+/* HABITS */
+.habits-grid{display:flex;flex-direction:column;gap:9px;margin-bottom:1.5rem;}
+.habit-card{background:var(--white);border-radius:16px;border:1.5px solid transparent;padding:.9rem 1.1rem;display:flex;align-items:center;gap:12px;cursor:pointer;transition:all .22s;box-shadow:var(--shadow);}
+.habit-card:hover{transform:translateX(5px);border-color:var(--lav);}
+.habit-card.done{border-color:var(--mint);background:var(--mint-soft);}
+.habit-icon{font-size:22px;width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--lav-soft);flex-shrink:0;transition:background .2s;}
+.habit-card.done .habit-icon{background:var(--mint-soft);}
+.habit-info{flex:1;}
+.habit-name{font-size:14px;font-weight:500;transition:all .2s;}
+.habit-card.done .habit-name{text-decoration:line-through;color:var(--muted);}
+.habit-streak{font-size:11px;color:var(--muted);margin-top:2px;}
+.habit-check{width:26px;height:26px;border-radius:50%;border:2px solid var(--lav);display:flex;align-items:center;justify-content:center;transition:all .22s;flex-shrink:0;}
+.habit-card.done .habit-check{background:var(--mint-deep);border-color:var(--mint-deep);}
+.checkmark{color:white;font-size:13px;opacity:0;transition:opacity .2s;}
+.habit-card.done .checkmark{opacity:1;}
+
+/* PHOTO STRIP */
+.photo-strip{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:1.5rem;}
+.photo-card{border-radius:16px;overflow:hidden;height:120px;position:relative;}
+.photo-card img{width:100%;height:100%;object-fit:cover;}
+.photo-label{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(to top,rgba(46,32,53,0.6),transparent);color:white;font-size:11px;padding:8px 10px;}
+
+/* MOOD */
+.section-label{font-size:11px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px;}
+.mood-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1.4rem;}
+.mood-btn{padding:7px 15px;border-radius:50px;border:1.5px solid var(--lav);background:var(--white);font-size:13px;cursor:pointer;transition:all .18s;font-family:'DM Sans',sans-serif;}
+.mood-btn:hover,.mood-btn.selected{background:var(--lav);border-color:var(--lav-deep);}
+
+/* JOURNAL */
+.journal-wrap{margin-bottom:1.5rem;}
+.journal-box{width:100%;min-height:88px;border-radius:14px;border:1.5px solid var(--lav);padding:11px 14px;font-family:'DM Sans',sans-serif;font-size:14px;color:var(--text);background:var(--white);resize:none;outline:none;transition:border .2s;line-height:1.6;}
+.journal-box:focus{border-color:var(--lav-deep);}
+.save-btn{margin-top:9px;padding:10px 24px;border-radius:50px;background:var(--lav-deep);color:white;border:none;font-size:14px;font-weight:500;cursor:pointer;transition:all .2s;font-family:'DM Sans',sans-serif;}
+.save-btn:hover{background:var(--pink-deep);}
+
+/* MANAGE */
+.section-title{font-family:'Cormorant Garamond',serif;font-size:1.6rem;margin-bottom:1.4rem;font-weight:500;}
+.manage-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:1.4rem;}
+@media(max-width:480px){.manage-grid{grid-template-columns:1fr;}}
+.manage-card{background:var(--white);border-radius:16px;padding:.9rem 1.1rem;border:1px solid var(--pink);display:flex;align-items:center;gap:10px;box-shadow:var(--shadow);}
+.manage-icon{font-size:22px;}
+.manage-name{font-size:13px;font-weight:500;flex:1;}
+.manage-del{background:none;border:none;color:var(--pink-deep);cursor:pointer;font-size:20px;padding:2px 6px;border-radius:8px;line-height:1;}
+.manage-del:hover{background:var(--pink-soft);}
+.add-form{background:var(--lav-soft);border-radius:var(--r);padding:1.4rem;border:1px solid var(--lav);}
+.add-form h3{font-size:14px;font-weight:500;margin-bottom:.9rem;}
+.emoji-row{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:.9rem;}
+.emoji-pick{font-size:19px;padding:5px 9px;border-radius:9px;border:1.5px solid transparent;cursor:pointer;background:var(--white);transition:all .15s;}
+.emoji-pick.selected,.emoji-pick:hover{border-color:var(--lav-deep);background:var(--lav-soft);}
+.form-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:.9rem;}
+.form-input{flex:1;min-width:140px;padding:10px 13px;border-radius:11px;border:1.5px solid var(--lav);background:var(--white);font-family:'DM Sans',sans-serif;font-size:13px;color:var(--text);outline:none;}
+.form-input:focus{border-color:var(--lav-deep);}
+.add-btn{padding:10px 22px;border-radius:50px;background:var(--lav-deep);color:white;border:none;font-size:13px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .2s;}
+.add-btn:hover{background:var(--pink-deep);}
+
+/* PROGRESS VIEW */
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:1.4rem;}
+@media(max-width:400px){.stats-row{grid-template-columns:1fr 1fr;}}
+.stat-card{background:var(--white);border-radius:16px;padding:1.1rem;box-shadow:var(--shadow);text-align:center;}
+.stat-num{font-family:'Cormorant Garamond',serif;font-size:2.1rem;color:var(--lav-deep);}
+.stat-label{font-size:11px;color:var(--muted);margin-top:3px;}
+.chart-card{background:var(--white);border-radius:var(--r);padding:1.3rem;box-shadow:var(--shadow);margin-bottom:1.2rem;}
+.chart-card h3{font-size:14px;font-weight:500;margin-bottom:1.1rem;}
+.bar-chart{display:flex;align-items:flex-end;gap:7px;height:110px;}
+.bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end;}
+.bar{width:100%;border-radius:7px 7px 0 0;background:linear-gradient(to top,var(--lav-deep),var(--pink));min-height:4px;transition:height .5s ease;}
+.bar-label{font-size:10px;color:var(--muted);}
+.bar-val{font-size:10px;font-weight:500;color:var(--text);}
+.hprog-list{display:flex;flex-direction:column;gap:10px;}
+.hprog-item{display:flex;align-items:center;gap:10px;}
+.hprog-name{font-size:12px;width:120px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.prog-bg{flex:1;height:9px;background:var(--lav-soft);border-radius:50px;overflow:hidden;}
+.prog-fill{height:100%;border-radius:50px;background:linear-gradient(to right,var(--lav-deep),var(--pink-deep));transition:width .6s ease;}
+.prog-pct{font-size:11px;font-weight:500;color:var(--muted);width:32px;text-align:right;}
+
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(46,32,53,0.4);backdrop-filter:blur(6px);z-index:200;display:none;align-items:center;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--white);border-radius:24px;padding:2rem;width:92%;max-width:380px;box-shadow:0 16px 48px rgba(150,100,180,0.18);animation:pop .2s ease;}
+@keyframes pop{from{transform:scale(.9);opacity:0;}to{transform:scale(1);opacity:1;}}
+.modal h3{font-family:'Cormorant Garamond',serif;font-size:1.3rem;margin-bottom:6px;}
+.modal p{font-size:13px;color:var(--muted);margin-bottom:1.1rem;line-height:1.6;}
+.modal label{font-size:12px;font-weight:500;display:block;margin-bottom:5px;}
+.modal input[type=time]{width:100%;padding:10px 13px;border-radius:11px;border:1.5px solid var(--lav);font-size:15px;font-family:'DM Sans',sans-serif;outline:none;margin-bottom:1rem;color:var(--text);}
+.modal-btns{display:flex;gap:8px;}
+.modal-confirm{flex:1;padding:10px;border-radius:50px;background:var(--lav-deep);color:white;border:none;font-size:13px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;}
+.modal-cancel{flex:1;padding:10px;border-radius:50px;background:var(--lav-soft);color:var(--muted);border:none;font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif;}
+
+.toast{position:fixed;bottom:2rem;left:50%;transform:translateX(-50%);background:var(--text);color:white;padding:9px 22px;border-radius:50px;font-size:12px;z-index:500;opacity:0;pointer-events:none;transition:opacity .3s;white-space:nowrap;}
+.toast.show{opacity:1;}
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loading-screen">
+  <div class="loader-flower">🌸</div>
+  <p>Loading your space...</p>
+</div>
+
+<!-- HERO -->
+<div id="app" style="display:none">
+<div class="hero">
+  <img src="https://images.unsplash.com/photo-1495521821757-a1efb6729352?w=1200&q=80" class="hero-img" alt="flowers">
+  <div class="hero-overlay"></div>
+  <div class="hero-text">
+    <h1>Good <em id="time-greeting">morning</em>, Anjali ✨</h1>
+    <p id="date-pill"></p>
+  </div>
+  <div class="hero-notif">
+    <button class="notif-btn" id="notif-btn" onclick="openNotifModal()">🔔 Remind me</button>
+  </div>
+</div>
+
+<nav>
+  <button class="nav-tab active" onclick="switchView('today')">Today</button>
+  <button class="nav-tab" onclick="switchView('manage')">My Habits</button>
+  <button class="nav-tab" onclick="switchView('progress')">Progress</button>
+</nav>
+
+<div class="sync-bar">
+  <div class="sync-dot orange" id="sync-dot"></div>
+  <span id="sync-label">Connecting...</span>
+</div>
+
+<main>
+  <!-- TODAY -->
+  <div class="view active" id="view-today">
+    <div class="inspo-card">
+      <img src="https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=800&q=80" alt="cozy">
+      <div class="inspo-overlay">
+        <div class="inspo-quote" id="daily-quote">"Small steps every day lead to big change."</div>
+        <div class="inspo-author">— your daily reminder 🌸</div>
+      </div>
+    </div>
+
+    <div class="progress-banner">
+      <div class="progress-circle">
+        <svg width="68" height="68" viewBox="0 0 68 68">
+          <circle cx="34" cy="34" r="28" fill="none" stroke="#ede5fb" stroke-width="6"/>
+          <circle cx="34" cy="34" r="28" fill="none" stroke="#9478cc" stroke-width="6"
+            stroke-dasharray="175.9" id="progress-arc" stroke-dashoffset="175.9" stroke-linecap="round"/>
+        </svg>
+        <span class="pct" id="progress-pct">0%</span>
+      </div>
+      <div class="progress-text">
+        <h3 id="progress-label">Let's start your day!</h3>
+        <p id="progress-sub">Tap a habit to mark it done</p>
+      </div>
+    </div>
+
+    <div class="habits-grid" id="habits-list"></div>
+
+    <div class="photo-strip">
+      <div class="photo-card">
+        <img src="https://images.pexels.com/photos/11001515/pexels-photo-11001515.jpeg?w=400&q=75" alt="workout">
+        <div class="photo-label">Move your body 💪</div>
+      </div>
+      <div class="photo-card">
+        <img src="https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=400&q=75" alt="calm">
+        <div class="photo-label">Find your calm 🧘</div>
+      </div>
+    </div>
+
+    <div class="section-label">How are you feeling today?</div>
+    <div class="mood-row">
+      <button class="mood-btn" onclick="selectMood(this,'😊 Happy')">😊 Happy</button>
+      <button class="mood-btn" onclick="selectMood(this,'🌸 Calm')">🌸 Calm</button>
+      <button class="mood-btn" onclick="selectMood(this,'😴 Tired')">😴 Tired</button>
+      <button class="mood-btn" onclick="selectMood(this,'😤 Stressed')">😤 Stressed</button>
+      <button class="mood-btn" onclick="selectMood(this,'✨ Motivated')">✨ Motivated</button>
+      <button class="mood-btn" onclick="selectMood(this,'💭 Meh')">💭 Meh</button>
+    </div>
+
+    <div class="journal-wrap">
+      <div class="section-label">Today's note</div>
+      <textarea class="journal-box" id="journal-box" placeholder="How was your day? Any wins, thoughts, or reflections... 🌷"></textarea>
+      <button class="save-btn" onclick="saveDay()">Save today ✓</button>
+    </div>
+  </div>
+
+  <!-- MANAGE -->
+  <div class="view" id="view-manage">
+    <div class="inspo-card" style="height:130px">
+      <img src="https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=800&q=80" alt="habits">
+      <div class="inspo-overlay">
+        <div class="inspo-quote" style="font-size:1.1rem">"You are what you repeatedly do."</div>
+      </div>
+    </div>
+    <div class="section-title">My Habits 🌿</div>
+    <div class="manage-grid" id="manage-list"></div>
+    <div class="add-form">
+      <h3>Add a new habit</h3>
+      <div class="emoji-row" id="emoji-row"></div>
+      <div class="form-row">
+        <input class="form-input" id="habit-name-input" placeholder="Habit name (e.g. Read 20 mins)">
+      </div>
+      <button class="add-btn" onclick="addHabit()">+ Add habit</button>
+    </div>
+  </div>
+
+  <!-- PROGRESS -->
+  <div class="view" id="view-progress">
+    <div class="inspo-card" style="height:130px">
+      <img src="https://images.unsplash.com/photo-1508615039623-a25605d2378d?w=800&q=80" alt="progress">
+      <div class="inspo-overlay">
+        <div class="inspo-quote" style="font-size:1.1rem">"Progress, not perfection. 🌱"</div>
+      </div>
+    </div>
+    <div class="section-title">Your Progress 📊</div>
+    <div class="stats-row" id="stats-row"></div>
+    <div class="chart-card">
+      <h3>Last 7 days</h3>
+      <div class="bar-chart" id="bar-chart"></div>
+    </div>
+    <div class="chart-card">
+      <h3>Per-habit completion rate</h3>
+      <div class="hprog-list" id="hprog-list"></div>
+    </div>
+  </div>
+</main>
+</div>
+
+<!-- NOTIF MODAL -->
+<div class="modal-overlay" id="notif-modal">
+  <div class="modal">
+    <h3>🔔 Daily reminder</h3>
+    <p>Get a browser notification at your chosen time every day to update your tracker.</p>
+    <label>Reminder time</label>
+    <input type="time" id="notif-time" value="20:00">
+    <div class="modal-btns">
+      <button class="modal-cancel" onclick="closeModal('notif-modal')">Cancel</button>
+      <button class="modal-confirm" onclick="setReminder()">Set reminder ✓</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Firebase -->
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, getDocs }
+  from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCEeV6ZjK5RvYFXXPkp0sop7EfI4k2KctU",
+  authDomain: "tracker-ae042.firebaseapp.com",
+  projectId: "tracker-ae042",
+  storageBucket: "tracker-ae042.firebasestorage.app",
+  messagingSenderId: "316543323482",
+  appId: "1:316543323482:web:7b395e090e3b21f927b763"
+};
+
+const DEFAULT_HABITS = [
+  {id:1,name:'Workout',icon:'🏋️'},
+  {id:2,name:'3 ltrs of water',icon:'💧'},
+  {id:3,name:'Face exercises',icon:'🧘'},
+  {id:4,name:'8k steps',icon:'🚶'},
+  {id:5,name:'Drawing',icon:'🎨'},
+  {id:6,name:'8hrs of sleep',icon:'💤'},
+];
+
+const EMOJIS = ['🏋️','💧','🧘','🚶','🎨','💤','📚','🌿','☀️','🍎','💊','🧹','✍️','🎵','🧴','🏃','🛏️','💻','🥗','🌊'];
+const QUOTES = [
+  '"Small steps every day lead to big change."',
+  '"Believe you can and you\'re halfway there."',
+  '"You don\'t have to be great to start, but start to be great."',
+  '"Every day is a new chance to be better."',
+  '"Your only limit is your mind. 🌸"',
+  '"Discipline is choosing what you want most."',
+  '"Be proud of every step forward, no matter how small. 🌱"',
+];
+
+let db, habits = [], allLogs = {}, selectedEmoji = '⭐', notifInterval = null;
+
+function todayKey(){ return new Date().toISOString().slice(0,10); }
+function getTodayLog(){ const k=todayKey(); if(!allLogs[k]) allLogs[k]={done:[],mood:'',journal:''}; return allLogs[k]; }
+function setSyncStatus(s){ const dot=document.getElementById('sync-dot'),lbl=document.getElementById('sync-label'); if(s==='ok'){dot.className='sync-dot green';lbl.textContent='Synced across all devices ✓';}else if(s==='loading'){dot.className='sync-dot orange';lbl.textContent='Syncing...';}else{dot.className='sync-dot red';lbl.textContent='Sync error';} }
+function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2800); }
+
+async function saveHabitsToFB(){ 
+  try{ 
+    if(db) {
+      await setDoc(doc(db,'tracker','habits'),{list:habits}); 
+      console.log('✓ Habits saved to Firebase');
+    }
+    localStorage.setItem('habits',JSON.stringify(habits)); 
+    setSyncStatus('ok'); 
+  }catch(e){ 
+    console.error('Save habits error:', e.message); 
+    localStorage.setItem('habits',JSON.stringify(habits)); 
+    setSyncStatus('ok'); 
+  } 
+}
+
+async function saveLogToFB(k){ 
+  try{ 
+    if(db) {
+      await setDoc(doc(db,'logs',k),allLogs[k]); 
+      console.log('✓ Log saved to Firebase for', k);
+    }
+    localStorage.setItem('logs',JSON.stringify(allLogs)); 
+    setSyncStatus('ok'); 
+  }catch(e){ 
+    console.error('Save log error:', e.message); 
+    localStorage.setItem('logs',JSON.stringify(allLogs)); 
+    setSyncStatus('ok'); 
+  } 
+}
+
+// INIT
+try {
+  const app = initializeApp(FIREBASE_CONFIG);
+  db = getFirestore(app);
+  console.log('Firebase initialized successfully');
+
+  // Load habits
+  const hSnap = await getDoc(doc(db,'tracker','habits'));
+  if(hSnap.exists()) habits = hSnap.data().list || DEFAULT_HABITS;
+  else { habits = DEFAULT_HABITS; await saveHabitsToFB(); }
+  console.log('Habits loaded:', habits);
+
+  // Load logs
+  const logsSnap = await getDocs(collection(db,'logs'));
+  logsSnap.forEach(d => { allLogs[d.id] = d.data(); });
+  console.log('Logs loaded:', Object.keys(allLogs).length + ' days');
+
+  setSyncStatus('ok');
+
+  // Live listener for habits (sync across devices)
+  onSnapshot(doc(db,'tracker','habits'), snap => {
+    if(snap.exists()){ 
+      const newHabits = snap.data().list || habits;
+      if(JSON.stringify(newHabits) !== JSON.stringify(habits)){
+        habits = newHabits; 
+        renderToday(); 
+        renderManage(); 
+        console.log('✓ Habits synced from Firebase');
+      }
+    }
+  }, error => { 
+    console.error('❌ Habits listener error:', error.message); 
+    setSyncStatus('error');
+  });
+
+  // Live listener for ALL logs (sync across devices)
+  onSnapshot(collection(db,'logs'), snapshot => {
+    let hasChanges = false;
+    snapshot.docs.forEach(d => { 
+      if(!allLogs[d.id] || JSON.stringify(allLogs[d.id]) !== JSON.stringify(d.data())){
+        allLogs[d.id] = d.data(); 
+        hasChanges = true;
+      }
+    });
+    if(hasChanges){
+      renderToday(); 
+      console.log('✓ Logs synced from Firebase');
+    }
+  }, error => { 
+    console.error('❌ Logs listener error:', error.message); 
+    setSyncStatus('error');
+  });
+
+} catch(e) {
+  console.error('❌ Firebase Error:', e.message);
+  // Use local storage and default habits - app works offline
+  habits = DEFAULT_HABITS;
+  const savedHabits = localStorage.getItem('habits');
+  if(savedHabits) habits = JSON.parse(savedHabits);
+  const savedLogs = localStorage.getItem('logs');
+  if(savedLogs) allLogs = JSON.parse(savedLogs);
+  setSyncStatus('ok'); // Local mode
+  console.log('⚠️ Running in LOCAL MODE (offline)');
+}
+
+// Hide loading, show app
+document.getElementById('loading-screen').style.display = 'none';
+document.getElementById('app').style.display = '';
+
+// Init UI
+const now = new Date(), h = now.getHours();
+document.getElementById('time-greeting').textContent = h<12?'morning':h<17?'afternoon':'evening';
+document.getElementById('date-pill').textContent = now.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'});
+document.getElementById('daily-quote').textContent = QUOTES[now.getDay() % QUOTES.length];
+
+// Restore notif
+const savedTime = localStorage.getItem('reminderTime');
+if(savedTime && Notification.permission==='granted'){
+  scheduleReminder(savedTime);
+  document.getElementById('notif-btn').classList.add('on');
+  document.getElementById('notif-btn').textContent = '🔔 Reminder on';
+}
+
+renderToday();
+
+// Periodic sync refresh (every 30 seconds)
+setInterval(async () => {
+  if(db){
+    try {
+      const hSnap = await getDoc(doc(db,'tracker','habits'));
+      if(hSnap.exists() && JSON.stringify(hSnap.data().list) !== JSON.stringify(habits)){
+        habits = hSnap.data().list || habits;
+        renderToday();
+        renderManage();
+        console.log('Periodic sync: habits updated');
+      }
+    } catch(e) { console.log('Periodic sync error:', e); }
+  }
+}, 30000);
+
+// EXPOSED FUNCTIONS
+window.switchView = function(v) {
+  document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(el=>el.classList.remove('active'));
+  document.getElementById('view-'+v).classList.add('active');
+  document.querySelectorAll('.nav-tab')[['today','manage','progress'].indexOf(v)].classList.add('active');
+  if(v==='progress') renderProgress();
+  if(v==='manage') renderManage();
+};
+
+// Debug & manual sync
+window.forceSync = async function() {
+  console.log('🔄 Force syncing...');
+  try {
+    if(!db) { console.log('❌ Firebase not connected'); return; }
+    await saveHabitsToFB();
+    await saveLogToFB(todayKey());
+    console.log('✓ Force sync complete!');
+  } catch(e) {
+    console.error('❌ Force sync failed:', e.message);
+  }
+};
+
+window.checkSync = function() {
+  console.log('📊 Sync Status:');
+  console.log('  Firebase DB:', db ? '✓ Connected' : '❌ Not connected');
+  console.log('  Habits:', habits.length, 'loaded');
+  console.log('  Logs:', Object.keys(allLogs).length, 'days');
+  console.log('  Today:', todayKey());
+};
+
+
+function renderToday() {
+  const log = getTodayLog();
+  const list = document.getElementById('habits-list');
+  list.innerHTML = '';
+  habits.forEach(h => {
+    const done = log.done && log.done.includes(h.id);
+    const streak = calcStreak(h.id);
+    const card = document.createElement('div');
+    card.className = 'habit-card'+(done?' done':'');
+    card.innerHTML = `<div class="habit-icon">${h.icon}</div><div class="habit-info"><div class="habit-name">${h.name}</div><div class="habit-streak">${streak>0?'🔥 '+streak+' day streak':'Start your streak today!'}</div></div><div class="habit-check"><span class="checkmark">✓</span></div>`;
+    card.onclick = () => toggleHabit(h.id);
+    list.appendChild(card);
+  });
+  updateProgress();
+  if(log.mood) document.querySelectorAll('.mood-btn').forEach(b=>b.classList.toggle('selected',b.textContent.trim()===log.mood));
+  document.getElementById('journal-box').value = log.journal||'';
+}
+
+function updateProgress() {
+  const log=getTodayLog(), total=habits.length, done=(log.done||[]).length;
+  const pct=total>0?Math.round((done/total)*100):0;
+  document.getElementById('progress-pct').textContent=pct+'%';
+  document.getElementById('progress-arc').style.strokeDashoffset=175.9-(pct/100)*175.9;
+  const labels=['Let\'s start your day! 🌸','Great start, keep going 💪','Halfway there! ✨','Almost done, so close 🌟','All done! Amazing! 🎉'];
+  document.getElementById('progress-label').textContent=labels[Math.min(Math.floor(pct/25),4)];
+  document.getElementById('progress-sub').textContent=`${done} of ${total} habits completed`;
+}
+
+function calcStreak(hid) {
+  let s=0; const today=new Date();
+  for(let i=1;i<=365;i++){ const d=new Date(today); d.setDate(d.getDate()-i); const k=d.toISOString().slice(0,10); if(allLogs[k]&&allLogs[k].done&&allLogs[k].done.includes(hid)) s++; else break; }
+  return s;
+}
+
+async function toggleHabit(id) {
+  const log=getTodayLog(); const idx=(log.done||[]).indexOf(id);
+  if(idx>-1) log.done.splice(idx,1); else { if(!log.done) log.done=[]; log.done.push(id); }
+  renderToday(); setSyncStatus('loading'); await saveLogToFB(todayKey());
+}
+
+window.selectMood = function(btn,mood) {
+  document.querySelectorAll('.mood-btn').forEach(b=>b.classList.remove('selected'));
+  btn.classList.add('selected'); getTodayLog().mood=mood; saveLogToFB(todayKey());
+};
+
+window.saveDay = async function() {
+  getTodayLog().journal=document.getElementById('journal-box').value;
+  setSyncStatus('loading'); await saveLogToFB(todayKey()); showToast('Saved! Great job today 🌸');
+};
+
+function renderManage() {
+  const list=document.getElementById('manage-list'); list.innerHTML='';
+  habits.forEach(h=>{
+    const card=document.createElement('div'); card.className='manage-card';
+    card.innerHTML=`<div class="manage-icon">${h.icon}</div><div class="manage-name">${h.name}</div><button class="manage-del" onclick="deleteHabit(${h.id})">×</button>`;
+    list.appendChild(card);
+  });
+  const er=document.getElementById('emoji-row'); er.innerHTML='';
+  EMOJIS.forEach(e=>{ const btn=document.createElement('button'); btn.className='emoji-pick'+(e===selectedEmoji?' selected':''); btn.textContent=e; btn.onclick=()=>{ selectedEmoji=e; renderManage(); }; er.appendChild(btn); });
+}
+
+window.addHabit = async function() {
+  const name=document.getElementById('habit-name-input').value.trim();
+  if(!name){showToast('Please enter a habit name');return;}
+  habits.push({id:Date.now(),name,icon:selectedEmoji});
+  document.getElementById('habit-name-input').value='';
+  setSyncStatus('loading'); await saveHabitsToFB(); renderManage(); renderToday(); showToast('Habit added! 🌿');
+};
+
+window.deleteHabit = async function(id) {
+  habits=habits.filter(h=>h.id!==id); setSyncStatus('loading'); await saveHabitsToFB(); renderManage(); renderToday(); showToast('Habit removed');
+};
+
+function renderProgress() {
+  const keys=Object.keys(allLogs), total=keys.length; let totalDone=0, best=0;
+  keys.forEach(k=>{ totalDone+=(allLogs[k].done||[]).length; });
+  habits.forEach(h=>{ const s=calcStreak(h.id); if(s>best) best=s; });
+  document.getElementById('stats-row').innerHTML=`<div class="stat-card"><div class="stat-num">${total}</div><div class="stat-label">Days tracked</div></div><div class="stat-card"><div class="stat-num">${totalDone}</div><div class="stat-label">Completed</div></div><div class="stat-card"><div class="stat-num">${best}🔥</div><div class="stat-label">Best streak</div></div>`;
+  const bc=document.getElementById('bar-chart'); bc.innerHTML='';
+  const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  for(let i=6;i>=0;i--){ const d=new Date(); d.setDate(d.getDate()-i); const k=d.toISOString().slice(0,10),log=allLogs[k]; const done=log?(log.done||[]).length:0,tot=habits.length||1,pct=Math.round((done/tot)*100); const w=document.createElement('div'); w.className='bar-wrap'; w.innerHTML=`<div class="bar-val">${done>0?done:''}</div><div class="bar" style="height:${Math.max(pct,4)}%"></div><div class="bar-label">${days[d.getDay()]}</div>`; bc.appendChild(w); }
+  const pl=document.getElementById('hprog-list'); pl.innerHTML='';
+  habits.forEach(h=>{ const logged=keys.filter(k=>allLogs[k].done&&allLogs[k].done.includes(h.id)).length; const pct=total>0?Math.round((logged/total)*100):0; pl.innerHTML+=`<div class="hprog-item"><div class="hprog-name">${h.icon} ${h.name}</div><div class="prog-bg"><div class="prog-fill" style="width:${pct}%"></div></div><div class="prog-pct">${pct}%</div></div>`; });
+}
+
+window.openNotifModal = ()=>document.getElementById('notif-modal').classList.add('open');
+window.closeModal = id=>document.getElementById(id).classList.remove('open');
+
+window.setReminder = function() {
+  const time=document.getElementById('notif-time').value; if(!time) return;
+  if('Notification' in window){ Notification.requestPermission().then(p=>{ if(p==='granted'){ localStorage.setItem('reminderTime',time); scheduleReminder(time); document.getElementById('notif-btn').classList.add('on'); document.getElementById('notif-btn').textContent='🔔 Reminder on'; closeModal('notif-modal'); showToast('Reminder set! 🔔'); }else showToast('Allow notifications in browser settings'); }); }
+};
+
+function scheduleReminder(time) {
+  if(notifInterval) clearInterval(notifInterval);
+  notifInterval=setInterval(()=>{ const now=new Date(),cur=`${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`; if(cur===time){ const log=getTodayLog(),done=(log.done||[]).length,tot=habits.length; new Notification("Anjali's Habit Tracker 🌸",{body:`You've done ${done}/${tot} habits today. Keep going! 🌿`}); } },60000);
+}
+
+</script>
+</body>
+</html>
