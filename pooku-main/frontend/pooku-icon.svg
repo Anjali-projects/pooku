@@ -1,0 +1,39 @@
+<svg width="192" height="192" viewBox="0 0 192 192" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="96" cy="96" r="90" fill="#6ba3d4" opacity="0.1"/>
+  
+  <!-- Head -->
+  <circle cx="96" cy="70" r="35" fill="#6ba3d4"/>
+  
+  <!-- Left ear -->
+  <circle cx="75" cy="45" r="12" fill="#6ba3d4"/>
+  
+  <!-- Right ear -->
+  <circle cx="117" cy="45" r="12" fill="#6ba3d4"/>
+  
+  <!-- Left eye -->
+  <circle cx="85" cy="65" r="6" fill="white"/>
+  <circle cx="85" cy="65" r="3" fill="#3d5a7a"/>
+  
+  <!-- Right eye -->
+  <circle cx="107" cy="65" r="6" fill="white"/>
+  <circle cx="107" cy="65" r="3" fill="#3d5a7a"/>
+  
+  <!-- Smile -->
+  <path d="M 85 80 Q 96 88 107 80" stroke="#3d5a7a" stroke-width="2" fill="none" stroke-linecap="round"/>
+  
+  <!-- Body -->
+  <rect x="70" y="105" width="52" height="50" rx="10" fill="#6ba3d4"/>
+  
+  <!-- Left paw -->
+  <circle cx="65" cy="145" r="8" fill="#6ba3d4"/>
+  
+  <!-- Right paw -->
+  <circle cx="127" cy="145" r="8" fill="#6ba3d4"/>
+  
+  <!-- Heart on chest -->
+  <path d="M 96 120 C 96 120 91 115 88 118 C 85 120 85 123 96 130 C 107 123 107 120 104 118 C 101 115 96 120 96 120" fill="#d4a574"/>
+  
+  <!-- Tail -->
+  <path d="M 122 130 Q 140 120 145 105" stroke="#6ba3d4" stroke-width="8" fill="none" stroke-linecap="round"/>
+</svg>

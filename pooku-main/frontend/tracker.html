@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#6ba3d4">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Pooku">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="pooku.png" type="image/svg+xml">
+<link rel="apple-touch-icon" href="pooku.png">
+<title>Pooku</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tracker.css">
+</head>
+<body>
+<a href="#main-content" class="skip-link">Skip to content</a>
+
+<!-- LOADING -->
+<div id="loading-screen" role="status" aria-live="polite">
+  <img src="pooku.png" alt="Pooku" class="loader-logo">
+  <p>Loading your space...</p>
+</div>
+
+<!-- HERO -->
+<div id="app" style="display:none">
+<div class="hero" id="hero-bg" style="background:linear-gradient(135deg,#e8f1f7 0%,#d4e8f5 25%,#c9e4d8 50%,#e8dcc9 75%,#f0e8f0 100%);">
+  <div class="season-particles" id="season-particles"></div>
+  <img src="pooku.png" style="position:absolute;top:16px;right:20px;width:44px;height:44px;border-radius:12px;opacity:0.5;z-index:2;" alt="Pooku">
+  <div class="hero-overlay" style="background:linear-gradient(to bottom,transparent 0%,var(--cream) 100%);"></div>
+  <div class="hero-text">
+    <div class="hero-title">
+      <h1>Good <em id="time-greeting">morning</em>, <span id="user-name">there</span></h1>
+      <p id="date-pill"></p>
+      <div class="checkin-pill" id="checkin-pill" style="margin-top:6px;display:none;">🌿 Day <span class="streak-num" id="checkin-streak">0</span> with Pooku</div>
+    </div>
+    <div class="hero-notif">
+      <div class="hero-avatar" id="hero-avatar" title="Your avatar"></div>
+      <button class="dark-toggle" id="dark-toggle" onclick="toggleDarkMode()" title="Toggle dark mode" aria-label="Toggle dark mode">🌙</button>
+      <button class="notif-btn" id="notif-btn" onclick="openNotifModal()">Remind me</button>
+      <button class="logout-btn" id="logout-btn" onclick="logout()">Logout</button>
+    </div>
+  </div>
+</div>
+
+<nav role="tablist" aria-label="Main navigation">
+  <button class="nav-tab active" role="tab" aria-selected="true" onclick="switchView('today')">Today</button>
+  <button class="nav-tab" role="tab" aria-selected="false" onclick="switchView('manage')">My Habits</button>
+  <button class="nav-tab" role="tab" aria-selected="false" onclick="switchView('progress')">Progress</button>
+  <button class="nav-tab" role="tab" aria-selected="false" onclick="switchView('calendar')">Calendar</button>
+  <button class="nav-tab" role="tab" aria-selected="false" onclick="switchView('reminders')">Reminders</button>
+  <button class="nav-tab" role="tab" aria-selected="false" onclick="switchView('analytics')">Analytics</button>
+  <button class="nav-tab" role="tab" aria-selected="false" onclick="switchView('friends')">Friends</button>
+  <button class="nav-tab" role="tab" aria-selected="false" onclick="switchView('settings')">Settings</button>
+</nav>
+
+<div class="sync-bar" role="status" aria-live="polite">
+  <div class="sync-dot orange" id="sync-dot" aria-hidden="true"></div>
+  <span id="sync-label">Connecting...</span>
+</div>
+
+<main id="main-content">
+  <!-- TODAY -->
+  <div class="view active" id="view-today">
+    <div id="evening-summary-slot"></div>
+    <div id="bedtime-banner-slot"></div>
+    <div class="inspo-card" style="background:linear-gradient(135deg,#5b7a9e,#6ba3d4,#4a9d7f,#d4a574);border-radius:18px;position:relative;">
+      <svg style="position:absolute;right:10px;bottom:8px;opacity:0.12;" width="110" height="110" viewBox="0 0 110 110"><path d="M55 105 C55 105 55 60 55 45 Q55 20 75 10 Q95 0 100 20 Q105 40 80 45 Q60 48 55 60" stroke="white" stroke-width="2" fill="none"/><path d="M55 70 Q35 55 20 60 Q5 65 10 80 Q15 95 35 85 Q50 78 55 70" stroke="white" stroke-width="2" fill="none"/><path d="M55 85 Q70 78 78 85 Q86 92 78 100 Q70 108 60 98 Q55 93 55 85" stroke="white" stroke-width="1.5" fill="none"/><circle cx="75" cy="10" r="3" fill="white" opacity="0.3"/><circle cx="20" cy="60" r="2.5" fill="white" opacity="0.25"/></svg>
+      <div class="inspo-overlay" style="background:linear-gradient(135deg,rgba(91,122,158,0.4),rgba(74,157,127,0.3));">
+        <div class="inspo-quote" id="daily-quote">"Small steps every day lead to big change."</div>
+        <div class="inspo-author">— your daily reminder</div>
+      </div>
+    </div>
+
+    <div class="progress-ring-centered" id="progress-banner">
+      <div class="progress-ring-glow" id="progress-glow"></div>
+      <div class="progress-circle">
+        <svg width="120" height="120" viewBox="0 0 120 120">
+          <circle cx="60" cy="60" r="52" fill="none" stroke="#f0f3f7" stroke-width="8"/>
+          <circle cx="60" cy="60" r="52" fill="none" stroke="#9478cc" stroke-width="8"
+            stroke-dasharray="326.7" id="progress-arc" stroke-dashoffset="326.7" stroke-linecap="round"/>
+        </svg>
+        <span class="pct" id="progress-pct">0%</span>
+      </div>
+      <h3 id="progress-label" style="font-size:15px;font-weight:500;margin-bottom:2px;">Let's start your day!</h3>
+      <p id="progress-sub" style="font-size:12px;color:var(--muted);">Tap a habit to mark it done</p>
+      <div class="badge-strip" id="badge-strip-today"></div>
+    </div>
+
+    <div id="weekly-reflection-slot"></div>
+
+    <div class="habits-grid" id="habits-list"></div>
+
+    <div class="section-label">How are you feeling today?</div>
+    <div class="mood-row">
+      <button class="mood-btn" onclick="selectMood(this,'Happy')">Happy</button>
+      <button class="mood-btn" onclick="selectMood(this,'Calm')">Calm</button>
+      <button class="mood-btn" onclick="selectMood(this,'Tired')">Tired</button>
+      <button class="mood-btn" onclick="selectMood(this,'Stressed')">Stressed</button>
+      <button class="mood-btn" onclick="selectMood(this,'Motivated')">Motivated</button>
+      <button class="mood-btn" onclick="selectMood(this,'Meh')">Meh</button>
+    </div>
+
+    <div class="journal-wrap">
+      <div class="section-label">Today's note</div>
+      <div class="voice-journal-row">
+        <button class="voice-record-btn" id="voice-record-btn" onclick="toggleVoiceRecord()" title="Record voice note" aria-label="Record voice note">🎙</button>
+        <span class="voice-timer" id="voice-timer"></span>
+      </div>
+      <div id="voice-playback-slot"></div>
+      <textarea class="journal-box" id="journal-box" placeholder="How was your day? Any wins, thoughts, or reflections..." maxlength="1000"></textarea>
+      <button class="save-btn" onclick="saveDay()">Save today</button>
+    </div>
+
+    <!-- TIME CAPSULE -->
+    <div style="margin-top:1rem;">
+      <div class="section-label">🔮 Time Capsule</div>
+      <div class="capsule-form" id="capsule-form">
+        <textarea id="capsule-message" placeholder="Dear future me..." maxlength="2000"></textarea>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+          <label style="font-size:12px;color:var(--muted);">Reveal in</label>
+          <select id="capsule-duration">
+            <option value="30">30 days</option>
+            <option value="90">90 days</option>
+            <option value="365">1 year</option>
+          </select>
+          <button class="add-btn" onclick="createTimeCapsule()" style="margin-left:auto;font-size:11px;padding:6px 14px;">Seal capsule 🔒</button>
+        </div>
+      </div>
+      <div id="capsule-list"></div>
+    </div>
+  </div>
+
+  <!-- MANAGE -->
+  <div class="view" id="view-manage">
+    <div class="view-header">
+      <h2>My Habits</h2>
+      <p>Build your daily ritual, one habit at a time</p>
+      <svg style="position:absolute;right:12px;top:50%;transform:translateY(-50%);opacity:0.15;" width="90" height="80" viewBox="0 0 90 80"><rect x="5" y="5" width="18" height="18" rx="3" stroke="white" stroke-width="2" fill="none"/><path d="M9 14 L13 18 L21 10" stroke="white" stroke-width="2" fill="none" stroke-linecap="round"/><rect x="30" y="5" width="55" height="4" rx="2" fill="white"/><rect x="30" y="14" width="35" height="3" rx="1.5" fill="white" opacity="0.6"/><rect x="5" y="32" width="18" height="18" rx="3" stroke="white" stroke-width="2" fill="none"/><rect x="30" y="32" width="55" height="4" rx="2" fill="white"/><rect x="30" y="41" width="40" height="3" rx="1.5" fill="white" opacity="0.6"/><rect x="5" y="58" width="18" height="18" rx="3" stroke="white" stroke-width="2" fill="none"/><path d="M9 67 L13 71 L21 63" stroke="white" stroke-width="2" fill="none" stroke-linecap="round"/><rect x="30" y="58" width="50" height="4" rx="2" fill="white"/><rect x="30" y="67" width="30" height="3" rx="1.5" fill="white" opacity="0.6"/></svg>
+    </div>
+    <div class="manage-grid" id="manage-list"></div>
+    <div class="add-form">
+      <h3>Add a new habit</h3>
+      <div class="emoji-row" id="emoji-row"></div>
+      <div class="form-row">
+        <input class="form-input" id="habit-name-input" placeholder="Habit name (e.g. Read 20 mins)" maxlength="50">
+        <select class="freq-select" id="habit-freq-input">
+          <option value="daily">Daily</option>
+          <option value="weekdays">Weekdays</option>
+          <option value="weekends">Weekends</option>
+          <option value="weekly">Weekly</option>
+          <option value="3x_week">3x / week</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <select class="category-select" id="habit-cat-input">
+          <option value="">No category</option>
+          <option value="Morning Routine">Morning Routine</option>
+          <option value="Health">Health</option>
+          <option value="Fitness">Fitness</option>
+          <option value="Mind">Mind</option>
+          <option value="Creative">Creative</option>
+          <option value="Productivity">Productivity</option>
+          <option value="Self-Care">Self-Care</option>
+        </select>
+      </div>
+      <input class="why-input" id="habit-why-input" placeholder="My why: I do this because... (optional)" maxlength="200">
+      <button class="add-btn" onclick="addHabit()" style="margin-top:8px;">+ Add habit</button>
+    </div>
+
+    <!-- Archived habits -->
+    <div class="archive-toggle" onclick="toggleArchivedSection()">
+      <span id="archive-arrow">▶</span> Archived habits (<span id="archived-count">0</span>)
+    </div>
+    <div id="archived-section" style="display:none">
+      <div class="archived-grid" id="archived-list"></div>
+    </div>
+
+    <!-- Habit Template Packs -->
+    <div style="margin-top:1.5rem;">
+      <div class="section-label">Quick Start Packs</div>
+      <div class="template-grid" id="template-grid"></div>
+    </div>
+  </div>
+
+  <!-- PROGRESS -->
+  <div class="view" id="view-progress">
+    <div class="view-header">
+      <h2>Your Progress</h2>
+      <p>Every step counts — see how far you've come</p>
+      <svg style="position:absolute;right:12px;top:50%;transform:translateY(-50%);opacity:0.15;" width="100" height="80" viewBox="0 0 100 80"><path d="M5 75 L25 50 L40 60 L60 30 L75 40 L95 10" stroke="white" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="95" cy="10" r="4" fill="white"/><path d="M5 75 L25 50 L40 60 L60 30 L75 40 L95 10 L95 75 Z" fill="white" opacity="0.08"/></svg>
+    </div>
+    <div class="stats-row" id="stats-row"></div>
+    <div class="chart-card">
+      <h3>Last 7 days</h3>
+      <div class="bar-chart" id="bar-chart"></div>
+    </div>
+    <div class="chart-card">
+      <h3>Per-habit completion rate</h3>
+      <div class="hprog-list" id="hprog-list"></div>
+    </div>
+    <button class="export-btn" onclick="exportData()">Export data as CSV</button>
+  </div>
+
+  <!-- CALENDAR VIEW -->
+  <div class="view" id="view-calendar">
+    <div class="view-header">
+      <h2>Habit Planner</h2>
+      <p>Your personal calendar — tap any day for details</p>
+      <svg style="position:absolute;right:12px;top:50%;transform:translateY(-50%);opacity:0.15;" width="90" height="80" viewBox="0 0 90 80"><rect x="5" y="15" width="80" height="60" rx="6" stroke="white" stroke-width="2" fill="none"/><rect x="5" y="15" width="80" height="16" rx="6" fill="white" opacity="0.15"/><line x1="15" y1="8" x2="15" y2="20" stroke="white" stroke-width="3" stroke-linecap="round"/><line x1="35" y1="8" x2="35" y2="20" stroke="white" stroke-width="3" stroke-linecap="round"/><line x1="55" y1="8" x2="55" y2="20" stroke="white" stroke-width="3" stroke-linecap="round"/><line x1="75" y1="8" x2="75" y2="20" stroke="white" stroke-width="3" stroke-linecap="round"/><circle cx="25" cy="42" r="4" fill="white" opacity="0.4"/><circle cx="45" cy="42" r="4" fill="white" opacity="0.6"/><circle cx="65" cy="42" r="4" fill="white"/><circle cx="25" cy="60" r="4" fill="white" opacity="0.3"/><circle cx="45" cy="60" r="4" fill="white" opacity="0.5"/></svg>
+    </div>
+    <div class="week-strip" id="week-strip"></div>
+    <div class="cal-month-toggle" id="cal-month-toggle" onclick="toggleCalMonth()">▼ Show full month</div>
+    
+    <div class="calendar-full-month" id="calendar-full-month">
+    <div class="calendar-container">
+      <div class="calendar-header">
+        <button class="cal-btn" onclick="prevMonth()">← Prev</button>
+        <div class="calendar-title" id="calendar-month-year">January 2026</div>
+        <button class="cal-btn" onclick="nextMonth()">Next →</button>
+      </div>
+      
+      <div class="calendar-weekdays">
+        <div class="weekday">Sun</div>
+        <div class="weekday">Mon</div>
+        <div class="weekday">Tue</div>
+        <div class="weekday">Wed</div>
+        <div class="weekday">Thu</div>
+        <div class="weekday">Fri</div>
+        <div class="weekday">Sat</div>
+      </div>
+      
+      <div class="calendar-grid" id="calendar-grid"></div>
+    </div>
+    </div>
+
+    <div style="margin-top:2rem;padding:1rem;background:var(--accent-light);border-radius:12px;">
+      <p style="font-size:12px;color:var(--accent-dark);margin:0;">
+        <strong>📍 How to read:</strong> Each day shows colored dots for completed habits. 
+        <span style="color:var(--success);">🟢 = Completed</span> 
+        <span style="color:var(--accent-dark);">🔵 = Not completed</span>
+      </p>
+    </div>
+  </div>
+
+  <!-- REMINDERS -->
+  <div class="view" id="view-reminders">
+    <div class="view-header">
+      <h2>Smart Reminders</h2>
+      <p>Never forget — set notification times for each habit</p>
+      <svg style="position:absolute;right:12px;top:50%;transform:translateY(-50%);opacity:0.15;" width="80" height="80" viewBox="0 0 80 80"><path d="M40 8 C22 8 12 22 12 36 L12 50 L8 56 L72 56 L68 50 L68 36 C68 22 58 8 40 8 Z" stroke="white" stroke-width="2.5" fill="none"/><circle cx="40" cy="65" r="6" stroke="white" stroke-width="2" fill="none"/><line x1="40" y1="2" x2="40" y2="8" stroke="white" stroke-width="3" stroke-linecap="round"/><path d="M30 56 L30 58 Q30 66 40 66 Q50 66 50 58 L50 56" stroke="white" stroke-width="1.5" fill="none"/></svg>
+    </div>
+    <div class="reminders-list" id="reminders-list"></div>
+  </div>
+
+  <!-- ADVANCED ANALYTICS -->
+  <div class="view" id="view-analytics">
+    <div class="view-header">
+      <h2>Deep Analytics</h2>
+      <p>Data-driven insights into your daily patterns</p>
+      <svg style="position:absolute;right:12px;top:50%;transform:translateY(-50%);opacity:0.15;" width="95" height="80" viewBox="0 0 95 80"><rect x="5" y="55" width="14" height="20" rx="3" fill="white"/><rect x="25" y="40" width="14" height="35" rx="3" fill="white"/><rect x="45" y="25" width="14" height="50" rx="3" fill="white"/><rect x="65" y="10" width="14" height="65" rx="3" fill="white"/><circle cx="12" cy="48" r="3" fill="white"/><circle cx="32" cy="33" r="3" fill="white"/><circle cx="52" cy="18" r="3" fill="white"/><circle cx="72" cy="5" r="3" fill="white"/><path d="M12 48 L32 33 L52 18 L72 5" stroke="white" stroke-width="1.5" stroke-dasharray="4,3" fill="none"/></svg>
+    </div>
+    <div class="analytics-list" id="analytics-list"></div>
+    <!-- Mood Trends Graph -->
+    <div class="mood-chart-card" id="mood-chart-card">
+      <h3>Mood Trends</h3>
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <button class="ch-btn primary" onclick="loadMoodTrends(30)" id="mood-30">30 days</button>
+        <button class="ch-btn" onclick="loadMoodTrends(90)" id="mood-90">90 days</button>
+      </div>
+      <canvas class="mood-chart-canvas" id="mood-chart-canvas" width="600" height="180"></canvas>
+      <div class="mood-legend" id="mood-legend"></div>
+    </div>
+  </div>
+
+  <!-- FRIENDS & SOCIAL -->
+  <div class="view" id="view-friends">
+    <div class="view-header">
+      <h2>Friends & Community</h2>
+      <p>Stay accountable together — habits are better shared</p>
+      <svg style="position:absolute;right:12px;top:50%;transform:translateY(-50%);opacity:0.15;" width="95" height="80" viewBox="0 0 95 80"><circle cx="35" cy="25" r="12" stroke="white" stroke-width="2.5" fill="none"/><path d="M15 65 Q15 45 35 42 Q55 45 55 65" stroke="white" stroke-width="2.5" fill="none"/><circle cx="60" cy="22" r="10" stroke="white" stroke-width="2" fill="none"/><path d="M45 60 Q45 43 60 40 Q75 43 75 60" stroke="white" stroke-width="2" fill="none"/><circle cx="80" cy="28" r="8" stroke="white" stroke-width="1.5" fill="none" opacity="0.6"/><path d="M68 62 Q68 48 80 46 Q92 48 92 62" stroke="white" stroke-width="1.5" fill="none" opacity="0.6"/></svg>
+    </div>
+
+    <!-- Main friends panel -->
+    <div id="friends-main-panel">
+      <!-- Shared Challenges -->
+      <div style="margin-bottom:1rem;">
+        <div class="section-title">Shared Challenges</div>
+        <div class="create-challenge-form" id="create-challenge-form" style="display:none;">
+          <input id="challenge-title" placeholder="Challenge name (e.g. 21 days of reading)" maxlength="100">
+          <input id="challenge-desc" placeholder="Description (optional)" maxlength="300">
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select id="challenge-duration">
+              <option value="7">7 days</option>
+              <option value="14">14 days</option>
+              <option value="21" selected>21 days</option>
+              <option value="30">30 days</option>
+            </select>
+            <button class="add-btn" onclick="createChallenge()" style="font-size:11px;padding:6px 14px;">Start challenge</button>
+          </div>
+        </div>
+        <button class="settings-btn" onclick="toggleChallengeForm()" id="toggle-challenge-btn" style="font-size:11px;margin-bottom:8px;">+ New Challenge</button>
+        <div id="challenges-list"></div>
+      </div>
+      <!-- Weekly Leaderboard -->
+      <div id="leaderboard-slot"></div>
+      <!-- Search -->
+      <div class="section-title">Find Friends</div>
+      <div class="friends-search-box">
+        <input class="friends-search-input" id="friend-search-input" placeholder="Search by username..." maxlength="50" onkeydown="if(event.key==='Enter')searchFriends()">
+        <button class="friends-search-btn" onclick="searchFriends()">Search</button>
+      </div>
+      <div class="search-results" id="search-results"></div>
+
+      <!-- Pending Requests -->
+      <div class="friends-section" id="pending-section" style="display:none">
+        <div class="friends-section-title">Incoming Requests <span class="badge" id="pending-count">0</span></div>
+        <div id="pending-list"></div>
+      </div>
+
+      <!-- My Friends -->
+      <div class="friends-section">
+        <div class="friends-section-title">My Friends <span class="badge" id="friends-count">0</span></div>
+        <div id="friends-list"></div>
+      </div>
+    </div>
+
+    <!-- Friend progress detail (hidden by default) -->
+    <div id="friend-progress-panel" style="display:none">
+      <button class="back-btn" onclick="closeFriendProgress()">← Back to friends</button>
+      <div id="friend-progress-content"></div>
+    </div>
+
+    <!-- Chat panel (hidden by default) -->
+    <div id="friend-chat-panel" style="display:none">
+      <button class="back-btn" onclick="closeFriendChat()">← Back to friends</button>
+      <div class="chat-container">
+        <div class="chat-header">
+          <div class="chat-header-avatar" id="chat-avatar">?</div>
+          <div class="chat-header-name" id="chat-name">Chat</div>
+        </div>
+        <div class="chat-messages" id="chat-messages">
+          <div class="chat-empty">No messages yet. Say hello!</div>
+        </div>
+        <div class="typing-indicator" id="typing-indicator">typing<span class="typing-dots"><span></span><span></span><span></span></span></div>
+        <div class="chat-input-row" style="position:relative;">
+          <button class="emoji-picker-toggle" onclick="toggleEmojiPicker()" title="Emoji" aria-label="Open emoji picker">😊</button>
+          <input class="chat-input" id="chat-input" placeholder="Type a message..." maxlength="500" onkeydown="if(event.key==='Enter')sendMessage()" onfocus="closeEmojiPicker()" style="border-radius:0 50px 50px 0;border-left:none;">
+          <button class="chat-send-btn" onclick="sendMessage()" aria-label="Send message">➤</button>
+          <div class="emoji-picker-panel" id="emoji-picker-panel">
+            <div class="emoji-picker-tabs" id="emoji-picker-tabs"></div>
+            <div class="emoji-grid" id="emoji-picker-grid"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS / PROFILE -->
+  <div class="view" id="view-settings">
+    <div class="view-header">
+      <h2>Profile & Settings</h2>
+      <p>Personalize your Pooku experience</p>
+      <svg style="position:absolute;right:12px;top:50%;transform:translateY(-50%);opacity:0.15;" width="80" height="80" viewBox="0 0 80 80"><circle cx="40" cy="40" r="15" stroke="white" stroke-width="2.5" fill="none"/><circle cx="40" cy="40" r="6" fill="white" opacity="0.3"/><g stroke="white" stroke-width="5" stroke-linecap="round"><line x1="40" y1="5" x2="40" y2="15"/><line x1="40" y1="65" x2="40" y2="75"/><line x1="5" y1="40" x2="15" y2="40"/><line x1="65" y1="40" x2="75" y2="40"/><line x1="15" y1="15" x2="22" y2="22"/><line x1="58" y1="58" x2="65" y2="65"/><line x1="65" y1="15" x2="58" y2="22"/><line x1="22" y1="58" x2="15" y2="65"/></g></svg>
+    </div>
+
+    <div class="settings-card">
+      <h3>Profile</h3>
+      <div class="avatar-section">
+        <div class="avatar-display" id="settings-avatar" onclick="toggleAvatarPicker()"></div>
+        <div>
+          <div style="font-weight:500;font-size:15px;" id="settings-username"></div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px;" id="settings-email"></div>
+        </div>
+      </div>
+      <div id="avatar-picker" style="display:none;">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:6px;">Choose your avatar</p>
+        <div class="avatar-grid" id="avatar-grid"></div>
+      </div>
+    </div>
+
+    <div class="settings-card">
+      <h3>Change Password</h3>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <input class="settings-input" type="password" id="settings-current-pw" placeholder="Current password" style="width:100%;">
+        <input class="settings-input" type="password" id="settings-new-pw" placeholder="New password (min 6 chars)" style="width:100%;">
+        <button class="settings-btn" onclick="changePassword()">Update Password</button>
+      </div>
+    </div>
+
+    <div class="settings-card">
+      <h3>Theme Color</h3>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:8px;">Choose your accent color</p>
+      <div class="color-picker-row" id="color-picker-row"></div>
+    </div>
+
+    <div class="settings-card">
+      <h3>Achievements</h3>
+      <div class="badges-grid" id="badges-grid"></div>
+    </div>
+
+    <div class="settings-card">
+      <h3>Data</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="settings-btn" onclick="exportData()">Export CSV</button>
+        <button class="settings-btn danger" onclick="resetOnboarding()">Replay Tutorial</button>
+      </div>
+    </div>
+  </div>
+</main>
+</div>
+
+<!-- HABIT NOTE MODAL -->
+<div class="habit-note-overlay" id="habit-note-modal" onclick="if(event.target===this)closeHabitNote()" role="dialog" aria-modal="true" aria-label="Habit note">
+  <div class="habit-note-modal">
+    <h3 id="habit-note-title">Habit Note</h3>
+    <div class="note-sub" id="habit-note-date"></div>
+    <textarea class="habit-note-textarea" id="habit-note-text" placeholder="Add a note for this habit..." maxlength="500"></textarea>
+    <div class="modal-btns" style="margin-top:1rem;">
+      <button class="modal-cancel" onclick="closeHabitNote()">Cancel</button>
+      <button class="modal-confirm" onclick="saveHabitNote()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- CALENDAR DAY DETAIL MODAL -->
+<div class="day-detail-overlay" id="day-detail-modal" onclick="if(event.target===this)closeDayDetail()" role="dialog" aria-modal="true" aria-label="Day details">
+  <div class="day-detail-modal" id="day-detail-content"></div>
+</div>
+
+<!-- EDIT HABIT MODAL -->
+<div class="edit-habit-overlay" id="edit-habit-modal" onclick="if(event.target===this)closeEditHabit()" role="dialog" aria-modal="true" aria-label="Edit habit">
+  <div class="edit-habit-modal">
+    <h3>Edit Habit</h3>
+    <div class="edit-emoji-row" id="edit-emoji-row"></div>
+    <input class="edit-habit-input" id="edit-habit-name" placeholder="Habit name" maxlength="50">
+    <div class="modal-btns">
+      <button class="modal-cancel" onclick="closeEditHabit()">Cancel</button>
+      <button class="modal-confirm" onclick="saveEditHabit()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- NOTIF MODAL -->
+<div class="modal-overlay" id="notif-modal" role="dialog" aria-modal="true" aria-label="Daily reminder">
+  <div class="modal">
+    <h3>Daily reminder</h3>
+    <p>Get a browser notification at your chosen time every day to update your tracker.</p>
+    <label>Reminder time</label>
+    <input type="time" id="notif-time" value="20:00">
+    <div class="modal-btns">
+      <button class="modal-cancel" onclick="closeModal('notif-modal')">Cancel</button>
+      <button class="modal-confirm" onclick="setReminder()">Set reminder ✓</button>
+    </div>
+  </div>
+</div>
+
+<!-- ONBOARDING -->
+<div class="onboard-overlay" id="onboard-overlay" style="display:none;">
+  <div class="onboard-card">
+    <div class="onboard-step" id="onboard-step-label">Step 1 of 4</div>
+    <div class="onboard-emoji" id="onboard-emoji">🌿</div>
+    <h2 id="onboard-title">Welcome to Pooku!</h2>
+    <p id="onboard-desc">Your personal habit tracker. We've added some starter habits — customize them anytime in My Habits.</p>
+    <div class="onboard-dots" id="onboard-dots"></div>
+    <button class="onboard-next" id="onboard-next" onclick="nextOnboardStep()">Next</button><br>
+    <button class="onboard-skip" onclick="finishOnboarding()">Skip tutorial</button>
+  </div>
+</div>
+
+<!-- TYPING INDICATOR (for chat) -->
+
+<canvas class="confetti-canvas" id="confetti-canvas"></canvas>
+<div class="toast" id="toast" role="alert" aria-live="assertive"></div>
+
+<script src="tracker.js"></script>
+</body>
+</html>
