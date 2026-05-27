@@ -1482,7 +1482,8 @@ const ONBOARD_STEPS = [
 let onboardStep = 0;
 
 function showOnboarding() {
-  if (localStorage.getItem('onboardDone')) return;
+  const key = `onboardDone_${currentUserId}`;
+  if (localStorage.getItem(key)) return;
   onboardStep = 0;
   renderOnboardStep();
   document.getElementById('onboard-overlay').style.display = 'flex';
@@ -1514,12 +1515,12 @@ window.nextOnboardStep = function() {
 };
 
 window.finishOnboarding = function() {
-  localStorage.setItem('onboardDone', '1');
+  localStorage.setItem(`onboardDone_${currentUserId}`, '1');
   document.getElementById('onboard-overlay').style.display = 'none';
 };
 
 window.resetOnboarding = function() {
-  localStorage.removeItem('onboardDone');
+  localStorage.removeItem(`onboardDone_${currentUserId}`);
   showToast('Tutorial will show on next reload');
 };
 

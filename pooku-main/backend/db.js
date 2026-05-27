@@ -1,21 +1,40 @@
-import sqlite3 from 'sqlite3';
-import { open } from 'sqlite';
-import { mkdir } from 'fs/promises';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { createClient } from '@libsql/client';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbPath = path.join(__dirname, '../database/habit_tracker.db');
+const client = createClient({
+  url: process.env.TURSO_DATABASE_URL,
+  authToken: process.env.TURSO_AUTH_TOKEN,
+});
+
+// Compatibility wrapper — provides same db.get/all/run/exec API as sqlite3
+// so server.js needs ZERO changes
+function createDbWrapper(client) {
+  return {
+    async exec(sql) {
+      await client.execute(sql);
+    },
+
+    async run(sql, params = []) {
+      const result = await client.execute({ sql, args: params });
+      return {
+        lastID: Number(result.lastInsertRowid),
+        changes: result.rowsAffected,
+      };
+    },
+
+    async get(sql, params = []) {
+      const result = await client.execute({ sql, args: params });
+      return result.rows[0] || undefined;
+    },
+
+    async all(sql, params = []) {
+      const result = await client.execute({ sql, args: params });
+      return result.rows;
+    },
+  };
+}
 
 export async function initDb() {
-  await mkdir(path.dirname(dbPath), { recursive: true });
-
-  const db = await open({
-    filename: dbPath,
-    driver: sqlite3.Database
-  });
-
-  await db.exec('PRAGMA foreign_keys = ON');
+  const db = createDbWrapper(client);
 
   // Create users table
   await db.exec(`

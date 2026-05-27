@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pooku-v8';
+const CACHE_NAME = 'pooku-v9';
 const urlsToCache = [
   '/',
   '/login.html',

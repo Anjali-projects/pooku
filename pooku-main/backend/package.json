@@ -24,7 +24,6 @@
     "express-rate-limit": "^8.5.2",
     "express-validator": "^7.0.0",
     "jsonwebtoken": "^9.0.0",
-    "sqlite": "^5.0.1",
-    "sqlite3": "^5.1.6"
+    "@libsql/client": "^0.14.0"
   }
 }
