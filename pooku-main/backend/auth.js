@@ -31,8 +31,8 @@ export const COOKIE_OPTIONS = {
 
 export function authMiddleware(req, res, next) {
   try {
-    // Prefer httpOnly cookie, fall back to Authorization header
-    const token = req.cookies?.token || req.headers.authorization?.split(' ')[1];
+    // Prefer httpOnly cookie, fall back to Authorization header, then query param (for SSE)
+    const token = req.cookies?.token || req.headers.authorization?.split(' ')[1] || req.query?.token;
     
     if (!token) {
       return res.status(401).json({ error: 'No token provided' });

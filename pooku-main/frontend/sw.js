@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pooku-v7';
+const CACHE_NAME = 'pooku-v8';
 const urlsToCache = [
   '/',
   '/login.html',
@@ -37,8 +37,8 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
-  // API calls - network first, cache GET responses for offline
-  if (url.pathname.startsWith('/api/')) {
+  // API calls - network only (API is on a different origin)
+  if (url.pathname.startsWith('/api/') || url.href.includes('/api/')) {
     if (event.request.method === 'GET') {
       event.respondWith(
         fetch(event.request)

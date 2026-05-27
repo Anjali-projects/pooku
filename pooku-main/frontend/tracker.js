@@ -493,7 +493,16 @@ window.logout = async function () {
 async function init() {
   if (!checkAuth()) return;
 
-  initDarkMode();
+  // Show onboarding FIRST for new users before anything else can fail
+  try {
+    document.getElementById('loading-screen').style.display = 'none';
+    document.getElementById('app').style.display = '';
+    showOnboarding();
+  } catch(e) { console.error('Onboarding error:', e); }
+
+  try {
+    initDarkMode();
+  } catch(e) { console.error('Dark mode error:', e); }
 
   document.getElementById('user-name').textContent = currentUsername;
 
@@ -582,35 +591,24 @@ async function init() {
     setSyncStatus('error');
   }
 
-  // Render badge strip on Today view
-  renderBadgeStrip();
-  // Render avatar displays
-  renderAvatarDisplays();
+  try { renderBadgeStrip(); } catch(e) { console.error('Badge strip error:', e); }
+  try { renderAvatarDisplays(); } catch(e) { console.error('Avatar error:', e); }
 
-  // Daily check-in & journal
   doCheckIn().catch(e => console.error('Check-in error:', e));
-  checkFloatingJournal();
-  checkWeeklyReflection();
-  // SSE for real-time chat
+  try { checkFloatingJournal(); } catch(e) { console.error('Journal float error:', e); }
+  try { checkWeeklyReflection(); } catch(e) { console.error('Reflection error:', e); }
   try { connectChatSSE(); } catch(e) { console.error('Chat SSE error:', e); }
 
-  document.getElementById('loading-screen').style.display = 'none';
-  document.getElementById('app').style.display = '';
-
-  showOnboarding();
-
-  initThemeColor();
-  setupTypingIndicator();
-  scheduleWeeklySummary();
-  flushSyncQueue();
-  showEveningSummary();
-  checkStreakFreezeEarned();
-
-  // New features
-  applySeasonalTheme();
-  checkBedtimeMode();
-  loadTimeCapsules();
-  loadTodayVoiceJournal();
+  try { initThemeColor(); } catch(e) { console.error('Theme color error:', e); }
+  try { setupTypingIndicator(); } catch(e) { console.error('Typing indicator error:', e); }
+  try { scheduleWeeklySummary(); } catch(e) { console.error('Weekly summary error:', e); }
+  try { flushSyncQueue(); } catch(e) { console.error('Sync queue error:', e); }
+  try { showEveningSummary(); } catch(e) { console.error('Evening summary error:', e); }
+  try { checkStreakFreezeEarned(); } catch(e) { console.error('Streak freeze error:', e); }
+  try { applySeasonalTheme(); } catch(e) { console.error('Seasonal theme error:', e); }
+  try { checkBedtimeMode(); } catch(e) { console.error('Bedtime error:', e); }
+  try { loadTimeCapsules(); } catch(e) { console.error('Time capsules error:', e); }
+  try { loadTodayVoiceJournal(); } catch(e) { console.error('Voice journal error:', e); }
 
   const savedTime = localStorage.getItem('reminderTime');
   if (savedTime && Notification.permission === 'granted') {
@@ -2490,7 +2488,9 @@ let chatSSE = null;
 
 function connectChatSSE() {
   if (chatSSE) return;
-  chatSSE = new EventSource(`${API_URL}/messages/stream`, { withCredentials: true });
+  const token = localStorage.getItem('token');
+  if (!token) return;
+  chatSSE = new EventSource(`${API_URL}/messages/stream?token=${encodeURIComponent(token)}`);
 
   chatSSE.addEventListener('new-message', (e) => {
     try {
