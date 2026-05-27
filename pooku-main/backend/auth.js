@@ -2,9 +2,10 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 
 if (!process.env.JWT_SECRET) {
-  const generated = crypto.randomBytes(64).toString('hex');
-  process.env.JWT_SECRET = generated;
-  console.warn('⚠ JWT_SECRET not set — generated a random secret. Sessions will not persist across restarts. Set JWT_SECRET in .env for production.');
+  // Derive a stable secret from a hash of the database URL so sessions survive restarts
+  const seed = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL || 'pooku-default-dev-secret';
+  process.env.JWT_SECRET = crypto.createHash('sha256').update(seed).digest('hex');
+  console.warn('⚠ JWT_SECRET not set — derived a stable secret from DATABASE URL. Set JWT_SECRET in .env for production.');
 }
 
 const JWT_SECRET = process.env.JWT_SECRET;

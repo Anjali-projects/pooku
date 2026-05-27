@@ -66,6 +66,9 @@ export async function initDb() {
   try { await db.exec('ALTER TABLE habits ADD COLUMN archived INTEGER DEFAULT 0'); } catch(e) {}
   try { await db.exec('ALTER TABLE habits ADD COLUMN category TEXT DEFAULT \'\''); } catch(e) {}
   try { await db.exec('ALTER TABLE habits ADD COLUMN my_why TEXT DEFAULT \'\''); } catch(e) {}
+  try { await db.exec('ALTER TABLE habits ADD COLUMN sort_order INTEGER DEFAULT 0'); } catch(e) {}
+  try { await db.exec('ALTER TABLE habits ADD COLUMN paused_until DATE DEFAULT NULL'); } catch(e) {}
+  try { await db.exec('ALTER TABLE users ADD COLUMN push_reminder_time TEXT DEFAULT NULL'); } catch(e) {}
 
   // Create check_ins table (daily app usage streak)
   await db.exec(`
@@ -245,6 +248,56 @@ export async function initDb() {
       duration_secs INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Create streak_freezes table (server-side tracking)
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS streak_freezes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      count INTEGER DEFAULT 0,
+      last_earned_date DATE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(user_id)
+    )
+  `);
+
+  // Create password_resets table
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS password_resets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      token TEXT NOT NULL UNIQUE,
+      expires_at DATETIME NOT NULL,
+      used INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Create push_subscriptions table
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      endpoint TEXT NOT NULL UNIQUE,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Create streak_freeze_uses table (tracks which days were covered by a freeze)
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS streak_freeze_uses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      use_date DATE NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(user_id, use_date)
     )
   `);
 

@@ -275,6 +275,11 @@ main{max-width:680px;margin:0 auto;padding:1.5rem 1rem 4rem;}
 .calendar-day:hover{background:var(--accent-light);}
 .calendar-day.other-month{background:var(--cream);color:var(--muted);}
 .calendar-day.today{border:2px solid var(--accent-dark);}
+.calendar-day.heat-0{background:rgba(107,163,212,0.08);}
+.calendar-day.heat-1{background:rgba(107,163,212,0.15);}
+.calendar-day.heat-2{background:rgba(107,163,212,0.25);}
+.calendar-day.heat-3{background:rgba(74,157,127,0.2);}
+.calendar-day.heat-4{background:rgba(74,157,127,0.3);}
 .day-num{font-weight:600;color:var(--text);margin-bottom:3px;}
 .day-habits{display:flex;flex-wrap:wrap;gap:2px;margin-top:2px;}
 .habit-dot{width:6px;height:6px;border-radius:50%;background:var(--accent-dark);flex-shrink:0;}
@@ -315,12 +320,13 @@ main{max-width:680px;margin:0 auto;padding:1.5rem 1rem 4rem;}
 }
 
 @media(max-width:480px){
-  .calendar-day{min-height:44px;padding:2px;font-size:7px;}
-  .day-num{font-size:8px;}
-  .weekday{font-size:7px;padding:3px;}
+  .calendar-day{min-height:48px;padding:3px;font-size:8px;}
+  .day-num{font-size:9px;}
+  .weekday{font-size:8px;padding:4px;}
   .calendar-header{padding:0.7rem;}
   .calendar-title{font-size:13px;}
-  .habit-emoji{font-size:9px;}
+  .habit-emoji{font-size:0;width:8px;height:8px;border-radius:50%;background:var(--success);display:inline-block;margin:1px;}
+  .day-habits{gap:1px;}
   .hero{height:180px;}
   .hero-title h1{font-size:1.5rem;}
   .hero-text{left:1rem;bottom:1rem;width:calc(100% - 2rem);}
@@ -858,3 +864,23 @@ main{max-width:680px;margin:0 auto;padding:1.5rem 1rem 4rem;}
   .season-particle{animation:none !important;display:none;}
   .voice-record-btn.recording{animation:none;}
 }
+
+/* UNREAD MESSAGE BADGES */
+.unread-badge{position:absolute;top:-4px;right:-6px;min-width:16px;height:16px;border-radius:50px;background:#e07060;color:white;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px;border:2px solid var(--white);line-height:1;}
+.friend-unread-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;border-radius:50px;background:#e07060;color:white;font-size:10px;font-weight:700;padding:0 5px;margin-left:6px;line-height:1;}
+
+/* WHY HINT */
+.why-hint{font-size:9px;color:var(--muted);font-weight:400;margin-left:6px;opacity:0.7;font-style:italic;}
+
+/* DRAG & DROP REORDERING (F4) */
+.drag-handle{cursor:grab;color:var(--muted);font-size:16px;user-select:none;padding:0 4px;flex-shrink:0;touch-action:none;}
+.drag-handle:active{cursor:grabbing;}
+.manage-card[draggable]{cursor:default;}
+.manage-card.dragging{opacity:0.4;background:var(--accent-light);}
+.manage-card.drag-over{border:2px dashed var(--accent);background:rgba(107,163,212,0.08);}
+
+/* PAUSE / VACATION MODE (F5) */
+.manage-card.paused{opacity:0.55;background:repeating-linear-gradient(45deg,transparent,transparent 10px,rgba(0,0,0,0.02) 10px,rgba(0,0,0,0.02) 20px);}
+.pause-badge{font-size:10px;color:var(--peach-deep);background:rgba(224,150,106,0.12);padding:1px 6px;border-radius:6px;margin-left:6px;font-weight:500;}
+.btn-pause{background:none;border:none;cursor:pointer;font-size:14px;padding:4px 6px;border-radius:8px;transition:background 0.15s;flex-shrink:0;}
+.btn-pause:hover{background:rgba(0,0,0,0.05);}

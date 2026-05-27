@@ -7,8 +7,10 @@ import bcryptjs from 'bcryptjs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { initDb } from './db.js';
-import { authMiddleware, generateToken, COOKIE_OPTIONS } from './auth.js';
+import { authMiddleware, generateToken, verifyToken, COOKIE_OPTIONS } from './auth.js';
 import { body, validationResult } from 'express-validator';
+import crypto from 'crypto';
+import webpush from 'web-push';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -41,6 +43,15 @@ const authLimiter = rateLimit({
   message: { success: false, error: 'Too many attempts. Please try again in 15 minutes.' }
 });
 
+// Rate limiting for social/messaging routes
+const socialLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 30, // 30 requests per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please slow down.' }
+});
+
 // Serve static files from frontend folder
 app.use(express.static(path.join(__dirname, '../frontend')));
 
@@ -48,6 +59,18 @@ app.use(express.static(path.join(__dirname, '../frontend')));
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/login.html'));
 });
+
+// VAPID keys for Web Push
+let vapidKeys;
+if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+  vapidKeys = { publicKey: process.env.VAPID_PUBLIC_KEY, privateKey: process.env.VAPID_PRIVATE_KEY };
+} else {
+  vapidKeys = webpush.generateVAPIDKeys();
+  console.warn('⚠ VAPID keys not set. Generated temporary keys (will change on restart):');
+  console.log('  VAPID_PUBLIC_KEY=' + vapidKeys.publicKey);
+  console.log('  VAPID_PRIVATE_KEY=' + vapidKeys.privateKey);
+}
+webpush.setVapidDetails('mailto:pooku@example.com', vapidKeys.publicKey, vapidKeys.privateKey);
 
 let db;
 
@@ -176,6 +199,91 @@ async function startServer() {
       res.json({ message: 'Logged out' });
     });
 
+    // Forgot password — request reset token
+    app.post('/api/auth/forgot-password',
+      authLimiter,
+      body('email').isEmail().withMessage('Valid email required'),
+      async (req, res) => {
+        try {
+          const errors = validationResult(req);
+          if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+          const { email } = req.body;
+          // Always return same response to prevent email enumeration
+          const user = await db.get('SELECT id FROM users WHERE email = ?', [email]);
+          if (user) {
+            const token = crypto.randomBytes(32).toString('hex');
+            const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour
+            await db.run('DELETE FROM password_resets WHERE user_id = ?', [user.id]);
+            await db.run('INSERT INTO password_resets (user_id, token, expires_at) VALUES (?, ?, ?)',
+              [user.id, token, expiresAt]);
+            console.log(`\n🔑 Password reset token for ${email}: ${token}\n`);
+          }
+          res.json({ message: 'If that email is registered, a reset code has been generated. Check server logs or your email.' });
+        } catch (error) {
+          console.error('Forgot password error:', error);
+          res.status(500).json(errorResponse('Failed to process request'));
+        }
+      }
+    );
+
+    // Reset password with token
+    app.post('/api/auth/reset-password',
+      authLimiter,
+      body('token').notEmpty().withMessage('Reset token required'),
+      body('newPassword').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+      async (req, res) => {
+        try {
+          const errors = validationResult(req);
+          if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+          const { token, newPassword } = req.body;
+          const reset = await db.get(
+            'SELECT * FROM password_resets WHERE token = ? AND used = 0 AND expires_at > ?',
+            [token, new Date().toISOString()]
+          );
+          if (!reset) return res.status(400).json(errorResponse('Invalid or expired reset token'));
+          const hashed = await bcryptjs.hash(newPassword, 10);
+          await db.run('UPDATE users SET password = ? WHERE id = ?', [hashed, reset.user_id]);
+          await db.run('UPDATE password_resets SET used = 1 WHERE id = ?', [reset.id]);
+          res.json({ message: 'Password has been reset. You can now login.' });
+        } catch (error) {
+          console.error('Reset password error:', error);
+          res.status(500).json(errorResponse('Failed to reset password'));
+        }
+      }
+    );
+
+    // Delete account (GDPR)
+    app.delete('/api/auth/account', authMiddleware, async (req, res) => {
+      try {
+        const { password } = req.body;
+        if (!password) return res.status(400).json(errorResponse('Password required for confirmation'));
+        const user = await db.get('SELECT * FROM users WHERE id = ?', [req.userId]);
+        if (!user) return res.status(404).json(errorResponse('User not found'));
+        const valid = await bcryptjs.compare(password, user.password);
+        if (!valid) return res.status(401).json(errorResponse('Incorrect password'));
+        // Explicitly delete from all tables (SQLite CASCADE may not be enabled)
+        const tables = ['completions','logs','habits','reminders','habit_notes','check_ins',
+          'weekly_reflections','messages','friends','challenge_logs','challenge_participants',
+          'challenges','time_capsules','voice_journals','streak_freezes','streak_freeze_uses',
+          'password_resets','push_subscriptions'];
+        for (const t of tables) {
+          const col = (t === 'messages') ? 'sender_id' : (t === 'friends') ? 'user_id' : (t === 'challenges') ? 'creator_id' : 'user_id';
+          await db.run(`DELETE FROM ${t} WHERE ${col} = ?`, [req.userId]);
+        }
+        // Also clean messages where user is receiver
+        await db.run('DELETE FROM messages WHERE receiver_id = ?', [req.userId]);
+        // Also clean friends where user is friend_id
+        await db.run('DELETE FROM friends WHERE friend_id = ?', [req.userId]);
+        // Delete user last
+        await db.run('DELETE FROM users WHERE id = ?', [req.userId]);
+        res.clearCookie('token', { path: '/' });
+        res.json({ message: 'Account deleted successfully' });
+      } catch (error) {
+        console.error('Delete account error:', error);
+        res.status(500).json(errorResponse('Failed to delete account'));
+      }
+    });
+
     // HABITS ROUTES
 
     // Get all habits for user
@@ -183,7 +291,7 @@ async function startServer() {
       try {
         const showArchived = req.query.archived === '1';
         const habits = await db.all(
-          'SELECT * FROM habits WHERE user_id = ? AND archived = ? ORDER BY created_at',
+          'SELECT * FROM habits WHERE user_id = ? AND archived = ? ORDER BY sort_order ASC, created_at ASC',
           [req.userId, showArchived ? 1 : 0]
         );
         res.json(habits);
@@ -295,6 +403,40 @@ async function startServer() {
       } catch (error) {
         console.error('Archive habit error:', error);
         res.status(500).json(errorResponse('Failed to archive habit'));
+      }
+    });
+
+    // Reorder habits (F4)
+    app.patch('/api/habits/reorder', authMiddleware, async (req, res) => {
+      try {
+        const { order } = req.body;
+        if (!Array.isArray(order) || order.length === 0) {
+          return res.status(400).json(errorResponse('order must be a non-empty array of habit IDs'));
+        }
+        for (let i = 0; i < order.length; i++) {
+          await db.run('UPDATE habits SET sort_order = ? WHERE id = ? AND user_id = ?',
+            [i, order[i], req.userId]);
+        }
+        res.json(successResponse({}, 'Habits reordered'));
+      } catch (error) {
+        console.error('Reorder habits error:', error);
+        res.status(500).json(errorResponse('Failed to reorder habits'));
+      }
+    });
+
+    // Pause / resume habit (F5 — vacation mode)
+    app.patch('/api/habits/:id/pause', authMiddleware, async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { pauseUntil } = req.body; // ISO date string or null
+        const habit = await db.get('SELECT * FROM habits WHERE id = ? AND user_id = ?', [id, req.userId]);
+        if (!habit) return res.status(404).json(errorResponse('Habit not found'));
+        await db.run('UPDATE habits SET paused_until = ? WHERE id = ? AND user_id = ?',
+          [pauseUntil || null, id, req.userId]);
+        res.json(successResponse({}, pauseUntil ? 'Habit paused' : 'Habit resumed'));
+      } catch (error) {
+        console.error('Pause habit error:', error);
+        res.status(500).json(errorResponse('Failed to pause habit'));
       }
     });
 
@@ -438,22 +580,18 @@ async function startServer() {
     // Get all logs for user (for progress view)
     app.get('/api/logs', authMiddleware, async (req, res) => {
       try {
+        // Single query instead of N+1
         const completions = await db.all(
-          `SELECT DISTINCT log_date FROM completions WHERE user_id = ? ORDER BY log_date DESC LIMIT 100`,
+          `SELECT habit_id, log_date FROM completions WHERE user_id = ? ORDER BY log_date DESC LIMIT 5000`,
           [req.userId]
         );
 
         const logs = {};
         for (const row of completions) {
-          const completed = await db.all(
-            'SELECT habit_id FROM completions WHERE user_id = ? AND log_date = ?',
-            [req.userId, row.log_date]
-          );
-          logs[row.log_date] = {
-            done: completed.map(c => c.habit_id),
-            mood: '',
-            journal: ''
-          };
+          if (!logs[row.log_date]) {
+            logs[row.log_date] = { done: [], mood: '', journal: '' };
+          }
+          logs[row.log_date].done.push(row.habit_id);
         }
 
         res.json(logs);
@@ -476,7 +614,13 @@ async function startServer() {
           [req.userId]
         );
 
-        // Calculate best streak
+        // Load freeze uses for streak protection
+        const freezeUses = await db.all(
+          'SELECT use_date FROM streak_freeze_uses WHERE user_id = ?', [req.userId]
+        );
+        const frozenDates = new Set(freezeUses.map(f => f.use_date));
+
+        // Calculate best streak (freeze-aware)
         let bestStreak = 0;
         const habits = await db.all('SELECT id FROM habits WHERE user_id = ?', [req.userId]);
 
@@ -488,12 +632,14 @@ async function startServer() {
 
           let streak = 0;
           const today = new Date();
-          for (let i = 0; i < 365; i++) {
+          const todayStr = today.toISOString().split('T')[0];
+          const doneToday = dates.some(d => d.log_date === todayStr);
+          const startOffset = doneToday ? 0 : 1;
+          for (let i = startOffset; i < 365; i++) {
             const date = new Date(today);
             date.setDate(date.getDate() - i);
             const dateStr = date.toISOString().split('T')[0];
-            
-            if (dates.some(d => d.log_date === dateStr)) {
+            if (dates.some(d => d.log_date === dateStr) || frozenDates.has(dateStr)) {
               streak++;
             } else {
               break;
@@ -527,14 +673,23 @@ async function startServer() {
             [req.userId, habit.id]
           );
 
-          // Calculate streak
+          // Load freeze uses for streak protection
+          const freezeUses = await db.all(
+            'SELECT use_date FROM streak_freeze_uses WHERE user_id = ?', [req.userId]
+          );
+          const frozenDates = new Set(freezeUses.map(f => f.use_date));
+
+          // Calculate streak (tolerate today not yet done, freeze-aware)
           let streak = 0;
           const today = new Date();
-          for (let i = 0; i < 365; i++) {
+          const todayStr = today.toISOString().split('T')[0];
+          const doneToday = completions.some(d => d.log_date === todayStr);
+          const startOffset = doneToday ? 0 : 1;
+          for (let i = startOffset; i < 365; i++) {
             const date = new Date(today);
             date.setDate(date.getDate() - i);
             const dateStr = date.toISOString().split('T')[0];
-            if (completions.some(d => d.log_date === dateStr)) {
+            if (completions.some(d => d.log_date === dateStr) || frozenDates.has(dateStr)) {
               streak++;
             } else {
               break;
@@ -567,30 +722,6 @@ async function startServer() {
       } catch (error) {
         console.error('Get analytics error:', error);
         res.status(500).json({ error: 'Failed to fetch analytics' });
-      }
-    });
-
-    // Get calendar data (heat map)
-    app.get('/api/calendar', authMiddleware, async (req, res) => {
-      try {
-        const year = req.query.year || new Date().getFullYear();
-        
-        const completions = await db.all(
-          `SELECT log_date, COUNT(*) as count FROM completions 
-           WHERE user_id = ? AND strftime('%Y', log_date) = ? 
-           GROUP BY log_date ORDER BY log_date`,
-          [req.userId, year]
-        );
-
-        const calendarData = {};
-        completions.forEach(c => {
-          calendarData[c.log_date] = c.count;
-        });
-
-        res.json({ year, calendarData });
-      } catch (error) {
-        console.error('Get calendar error:', error);
-        res.status(500).json({ error: 'Failed to fetch calendar' });
       }
     });
 
@@ -667,16 +798,17 @@ async function startServer() {
     });
 
     // FRIENDS ROUTES
-    app.get('/api/users/search', authMiddleware, async (req, res) => {
+    app.get('/api/users/search', authMiddleware, socialLimiter, async (req, res) => {
       try {
         const { query } = req.query;
-        if (!query || query.length < 2) {
+        if (!query || query.length < 3) {
           return res.json([]);
         }
 
+        // Only match from start of username to prevent enumeration
         const users = await db.all(
-          'SELECT id, username FROM users WHERE username LIKE ? AND id != ? LIMIT 10',
-          [`%${query}%`, req.userId]
+          'SELECT id, username FROM users WHERE username LIKE ? AND id != ? LIMIT 5',
+          [`${query}%`, req.userId]
         );
 
         res.json(users);
@@ -686,7 +818,7 @@ async function startServer() {
       }
     });
 
-    app.post('/api/friends/add', authMiddleware, async (req, res) => {
+    app.post('/api/friends/add', authMiddleware, socialLimiter, async (req, res) => {
       try {
         const { friendId } = req.body;
 
@@ -824,30 +956,6 @@ async function startServer() {
     });
 
     // MESSAGING ROUTES
-    app.post('/api/messages/send', authMiddleware, async (req, res) => {
-      try {
-        const { receiverId, message } = req.body;
-
-        if (!receiverId || !message) {
-          return res.status(400).json({ error: 'receiverId and message required' });
-        }
-
-        if (message.length > 500) {
-          return res.status(400).json({ error: 'Message too long (max 500 chars)' });
-        }
-
-        await db.run(
-          'INSERT INTO messages (sender_id, receiver_id, message) VALUES (?, ?, ?)',
-          [req.userId, receiverId, message]
-        );
-
-        res.json({ message: 'Message sent' });
-      } catch (error) {
-        console.error('Send message error:', error);
-        res.status(500).json({ error: 'Failed to send message' });
-      }
-    });
-
     app.get('/api/messages/:friendId', authMiddleware, async (req, res) => {
       try {
         const { friendId } = req.params;
@@ -869,6 +977,20 @@ async function startServer() {
       } catch (error) {
         console.error('Get messages error:', error);
         res.status(500).json({ error: 'Failed to fetch messages' });
+      }
+    });
+
+    // UNREAD MESSAGE COUNTS
+    app.get('/api/messages/unread-counts', authMiddleware, async (req, res) => {
+      try {
+        const counts = await db.all(
+          `SELECT sender_id, COUNT(*) as count FROM messages WHERE receiver_id = ? AND read_status = 0 GROUP BY sender_id`,
+          [req.userId]
+        );
+        res.json(counts);
+      } catch (error) {
+        console.error('Unread counts error:', error);
+        res.status(500).json({ error: 'Failed to fetch unread counts' });
       }
     });
 
@@ -963,6 +1085,77 @@ async function startServer() {
         res.status(500).json(errorResponse('Failed to change password'));
       }
     });
+
+    // ============ PUSH NOTIFICATIONS (F3) ============
+
+    // Get VAPID public key
+    app.get('/api/push/vapid-key', (req, res) => {
+      res.json({ publicKey: vapidKeys.publicKey });
+    });
+
+    // Subscribe to push notifications
+    app.post('/api/push/subscribe', authMiddleware, async (req, res) => {
+      try {
+        const { endpoint, keys } = req.body;
+        if (!endpoint || !keys?.p256dh || !keys?.auth) {
+          return res.status(400).json(errorResponse('Invalid push subscription'));
+        }
+        await db.run(
+          `INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES (?, ?, ?, ?)
+           ON CONFLICT(endpoint) DO UPDATE SET user_id = ?, p256dh = ?, auth = ?`,
+          [req.userId, endpoint, keys.p256dh, keys.auth, req.userId, keys.p256dh, keys.auth]
+        );
+        res.json(successResponse({}, 'Subscribed to push notifications'));
+      } catch (error) {
+        console.error('Push subscribe error:', error);
+        res.status(500).json(errorResponse('Failed to subscribe'));
+      }
+    });
+
+    // Unsubscribe from push
+    app.delete('/api/push/subscribe', authMiddleware, async (req, res) => {
+      try {
+        const { endpoint } = req.body;
+        if (endpoint) {
+          await db.run('DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint = ?', [req.userId, endpoint]);
+        } else {
+          await db.run('DELETE FROM push_subscriptions WHERE user_id = ?', [req.userId]);
+        }
+        res.json(successResponse({}, 'Unsubscribed'));
+      } catch (error) {
+        console.error('Push unsubscribe error:', error);
+        res.status(500).json(errorResponse('Failed to unsubscribe'));
+      }
+    });
+
+    // Set push reminder time
+    app.post('/api/push/reminder-time', authMiddleware, async (req, res) => {
+      try {
+        const { time } = req.body; // "HH:MM" or null
+        await db.run('UPDATE users SET push_reminder_time = ? WHERE id = ?', [time || null, req.userId]);
+        res.json(successResponse({}, time ? 'Push reminder set' : 'Push reminder cleared'));
+      } catch (error) {
+        console.error('Set push reminder error:', error);
+        res.status(500).json(errorResponse('Failed to set reminder'));
+      }
+    });
+
+    // Helper: send push to a user's subscriptions
+    async function sendPushToUser(userId, payload) {
+      const subs = await db.all('SELECT * FROM push_subscriptions WHERE user_id = ?', [userId]);
+      for (const sub of subs) {
+        try {
+          await webpush.sendNotification(
+            { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+            JSON.stringify(payload)
+          );
+        } catch (err) {
+          if (err.statusCode === 410 || err.statusCode === 404) {
+            await db.run('DELETE FROM push_subscriptions WHERE id = ?', [sub.id]);
+          }
+        }
+      }
+    }
 
     // FRIEND COMPARISON
     app.get('/api/friends/:friendId/compare', authMiddleware, async (req, res) => {
@@ -1069,24 +1262,82 @@ async function startServer() {
       }
     });
 
-    // ============ HABIT CATEGORIES & MY WHY (#16, #18) ============
-    app.patch('/api/habits/:id/details', authMiddleware, async (req, res) => {
+    // ============ STREAK FREEZES (server-side) ============
+    app.get('/api/streak-freezes', authMiddleware, async (req, res) => {
       try {
-        const { id } = req.params;
-        const { category, my_why } = req.body;
-        const habit = await db.get('SELECT * FROM habits WHERE id = ? AND user_id = ?', [id, req.userId]);
-        if (!habit) return res.status(404).json(errorResponse('Habit not found'));
+        const row = await db.get('SELECT count, last_earned_date FROM streak_freezes WHERE user_id = ?', [req.userId]);
+        res.json({ count: row ? row.count : 0, lastEarned: row ? row.last_earned_date : null });
+      } catch (e) { res.status(500).json(errorResponse('Failed')); }
+    });
 
-        if (category !== undefined) {
-          await db.run('UPDATE habits SET category = ? WHERE id = ?', [category.slice(0, 30), id]);
+    app.post('/api/streak-freezes/earn', authMiddleware, async (req, res) => {
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const existing = await db.get('SELECT * FROM streak_freezes WHERE user_id = ?', [req.userId]);
+        if (existing && existing.last_earned_date === today) {
+          return res.json({ count: existing.count, alreadyEarned: true });
         }
-        if (my_why !== undefined) {
-          await db.run('UPDATE habits SET my_why = ? WHERE id = ?', [my_why.slice(0, 200), id]);
+        if (existing) {
+          await db.run('UPDATE streak_freezes SET count = count + 1, last_earned_date = ? WHERE user_id = ?', [today, req.userId]);
+        } else {
+          await db.run('INSERT INTO streak_freezes (user_id, count, last_earned_date) VALUES (?, 1, ?)', [req.userId, today]);
         }
-        res.json(successResponse({}, 'Updated'));
-      } catch (error) {
-        console.error('Habit details error:', error);
-        res.status(500).json(errorResponse('Failed to update habit'));
+        const row = await db.get('SELECT count FROM streak_freezes WHERE user_id = ?', [req.userId]);
+        res.json({ count: row.count });
+      } catch (e) { res.status(500).json(errorResponse('Failed')); }
+    });
+
+    app.post('/api/streak-freezes/use', authMiddleware, async (req, res) => {
+      try {
+        const row = await db.get('SELECT count FROM streak_freezes WHERE user_id = ?', [req.userId]);
+        if (!row || row.count <= 0) {
+          return res.status(400).json(errorResponse('No streak freezes available'));
+        }
+        await db.run('UPDATE streak_freezes SET count = count - 1 WHERE user_id = ?', [req.userId]);
+        res.json({ count: row.count - 1 });
+      } catch (e) { res.status(500).json(errorResponse('Failed')); }
+    });
+
+    // Auto-apply streak freeze to missed days
+    app.post('/api/streak-freezes/auto-apply', authMiddleware, async (req, res) => {
+      try {
+        const today = new Date();
+        const freezeRow = await db.get('SELECT count FROM streak_freezes WHERE user_id = ?', [req.userId]);
+        const available = freezeRow ? freezeRow.count : 0;
+        const applied = [];
+
+        // Check up to 3 recent days (yesterday, day before, etc.)
+        for (let i = 1; i <= 3 && applied.length < available; i++) {
+          const d = new Date(today);
+          d.setDate(d.getDate() - i);
+          const dateStr = d.toISOString().split('T')[0];
+
+          // Check if any completions exist for this day
+          const log = await db.get(
+            'SELECT COUNT(*) as count FROM completions WHERE user_id = ? AND log_date = ?',
+            [req.userId, dateStr]
+          );
+          if (log.count > 0) continue; // day was active, no freeze needed
+
+          // Check if freeze already used for this date
+          const existing = await db.get(
+            'SELECT id FROM streak_freeze_uses WHERE user_id = ? AND use_date = ?',
+            [req.userId, dateStr]
+          );
+          if (existing) continue; // already frozen
+
+          // Apply freeze
+          await db.run('INSERT INTO streak_freeze_uses (user_id, use_date) VALUES (?, ?)',
+            [req.userId, dateStr]);
+          await db.run('UPDATE streak_freezes SET count = count - 1 WHERE user_id = ?', [req.userId]);
+          applied.push(dateStr);
+        }
+
+        const newCount = (await db.get('SELECT count FROM streak_freezes WHERE user_id = ?', [req.userId]))?.count || 0;
+        res.json({ applied, count: newCount });
+      } catch (e) {
+        console.error('Auto-apply freeze error:', e);
+        res.status(500).json(errorResponse('Failed'));
       }
     });
 
@@ -1166,10 +1417,43 @@ async function startServer() {
       }
     });
 
+    // ============ SSE TICKET SYSTEM ============
+    // Short-lived one-time tickets so JWT isn't exposed in SSE URL
+    const sseTickets = new Map(); // ticket -> { userId, expires }
+
+    app.post('/api/messages/sse-ticket', authMiddleware, (req, res) => {
+      const ticket = crypto.randomBytes(32).toString('hex');
+      sseTickets.set(ticket, { userId: req.userId, expires: Date.now() + 30000 }); // 30s TTL
+      // Cleanup expired tickets
+      for (const [t, v] of sseTickets) {
+        if (v.expires < Date.now()) sseTickets.delete(t);
+      }
+      res.json({ ticket });
+    });
+
     // ============ SSE FOR CHAT (#21) ============
     const sseClients = new Map(); // userId -> Set of response objects
 
-    app.get('/api/messages/stream', authMiddleware, (req, res) => {
+    app.get('/api/messages/stream', (req, res) => {
+      // Auth via short-lived ticket (preferred) or fallback to JWT token
+      let userId;
+      const ticket = req.query.ticket;
+      const token = req.query.token;
+      if (ticket) {
+        const entry = sseTickets.get(ticket);
+        if (!entry || entry.expires < Date.now()) {
+          return res.status(401).json({ error: 'Invalid or expired ticket' });
+        }
+        userId = entry.userId;
+        sseTickets.delete(ticket); // one-time use
+      } else if (token) {
+        const decoded = verifyToken(token);
+        if (!decoded) return res.status(401).json({ error: 'Invalid token' });
+        userId = decoded.userId;
+      } else {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
       res.writeHead(200, {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
@@ -1178,14 +1462,14 @@ async function startServer() {
       });
       res.write('data: connected\n\n');
 
-      if (!sseClients.has(req.userId)) sseClients.set(req.userId, new Set());
-      sseClients.get(req.userId).add(res);
+      if (!sseClients.has(userId)) sseClients.set(userId, new Set());
+      sseClients.get(userId).add(res);
 
       req.on('close', () => {
-        const clients = sseClients.get(req.userId);
+        const clients = sseClients.get(userId);
         if (clients) {
           clients.delete(res);
-          if (clients.size === 0) sseClients.delete(req.userId);
+          if (clients.size === 0) sseClients.delete(userId);
         }
       });
     });
@@ -1198,9 +1482,8 @@ async function startServer() {
       }
     }
 
-    // Update send message to push via SSE
-    const origSendHandler = app._router.stack;
-    app.post('/api/messages/send-sse', authMiddleware, async (req, res) => {
+    // Send message with SSE push
+    app.post('/api/messages/send-sse', authMiddleware, socialLimiter, async (req, res) => {
       try {
         const { receiverId, message } = req.body;
         if (!receiverId || !message || !message.trim()) {
@@ -1229,6 +1512,14 @@ async function startServer() {
         notifySSE(receiverId, 'new-message', newMsg);
         // Also push to sender (for multi-tab sync)
         notifySSE(req.userId, 'new-message', newMsg);
+
+        // Send push notification to receiver (F3)
+        const sender = await db.get('SELECT username FROM users WHERE id = ?', [req.userId]);
+        sendPushToUser(receiverId, {
+          title: `Message from ${sender?.username || 'a friend'}`,
+          body: message.trim().slice(0, 100),
+          url: '/tracker.html#friends'
+        }).catch(e => console.error('Push send error:', e));
 
         res.json(newMsg);
       } catch (error) {
@@ -1351,10 +1642,12 @@ async function startServer() {
     // Get challenges the user is part of (or created by friends)
     app.get('/api/challenges', authMiddleware, async (req, res) => {
       try {
+        const today = new Date().toISOString().split('T')[0];
         const challenges = await db.all(`
           SELECT c.*, u.username AS creator_name,
             (SELECT COUNT(*) FROM challenge_participants WHERE challenge_id = c.id) AS participant_count,
             (SELECT COUNT(*) FROM challenge_logs WHERE challenge_id = c.id AND user_id = ?) AS my_completed_days,
+            (SELECT log_date FROM challenge_logs WHERE challenge_id = c.id AND user_id = ? AND log_date = ?) AS last_log_date,
             CASE WHEN cp.user_id IS NOT NULL THEN 1 ELSE 0 END AS joined
           FROM challenges c
           JOIN users u ON c.creator_id = u.id
@@ -1364,7 +1657,7 @@ async function startServer() {
             FROM friends f WHERE (f.user_id = ? OR f.friend_id = ?) AND f.status = 'accepted'
           )
           ORDER BY c.created_at DESC
-        `, [req.userId, req.userId, req.userId, req.userId, req.userId, req.userId]);
+        `, [req.userId, req.userId, today, req.userId, req.userId, req.userId, req.userId, req.userId]);
         res.json(challenges);
       } catch (e) { console.error(e); res.status(500).json(errorResponse('Failed to load challenges')); }
     });
@@ -1442,6 +1735,10 @@ async function startServer() {
       try {
         const { audioData, duration } = req.body;
         if (!audioData) return res.status(400).json(errorResponse('Audio data required'));
+        // Validate it's an audio data URL
+        if (!audioData.startsWith('data:audio/')) {
+          return res.status(400).json(errorResponse('Invalid audio format'));
+        }
         // Limit to ~1MB of base64 data (~750KB audio)
         if (audioData.length > 1048576) return res.status(400).json(errorResponse('Recording too large'));
         const logDate = new Date().toISOString().split('T')[0];
@@ -1493,6 +1790,59 @@ async function startServer() {
       console.log(`✓ Server running on http://localhost:${PORT}`);
       console.log(`✓ Frontend available at http://localhost:${PORT}/`);
     });
+
+    // Push reminder check — every 60 seconds
+    const sentReminders = new Set(); // track "userId:HH:MM:type" to avoid duplicates within the minute
+    setInterval(async () => {
+      try {
+        const now = new Date();
+        const currentTime = `${now.getUTCHours().toString().padStart(2, '0')}:${now.getUTCMinutes().toString().padStart(2, '0')}`;
+
+        // 1. Global daily reminders (users.push_reminder_time)
+        const users = await db.all(
+          'SELECT id, push_reminder_time FROM users WHERE push_reminder_time IS NOT NULL'
+        );
+        for (const u of users) {
+          if (u.push_reminder_time === currentTime) {
+            const key = `${u.id}:${currentTime}:global`;
+            if (sentReminders.has(key)) continue;
+            sentReminders.add(key);
+            setTimeout(() => sentReminders.delete(key), 120000);
+            sendPushToUser(u.id, {
+              title: 'Pooku Reminder 🌿',
+              body: "Time to update your habits!",
+              url: '/tracker.html'
+            }).catch(e => console.error('Reminder push error:', e));
+          }
+        }
+
+        // 2. Per-habit reminders (reminders table)
+        const habitReminders = await db.all(
+          `SELECT r.user_id, r.habit_id, r.reminder_time, h.name, h.icon
+           FROM reminders r JOIN habits h ON r.habit_id = h.id
+           WHERE r.enabled = 1 AND r.reminder_time = ?`,
+          [currentTime]
+        );
+        // Group by user to send one push per user
+        const byUser = {};
+        for (const r of habitReminders) {
+          const key = `${r.user_id}:${currentTime}:habit:${r.habit_id}`;
+          if (sentReminders.has(key)) continue;
+          sentReminders.add(key);
+          setTimeout(() => sentReminders.delete(key), 120000);
+          if (!byUser[r.user_id]) byUser[r.user_id] = [];
+          byUser[r.user_id].push(r);
+        }
+        for (const [userId, rems] of Object.entries(byUser)) {
+          const names = rems.map(r => `${r.icon} ${r.name}`).join(', ');
+          sendPushToUser(Number(userId), {
+            title: `Habit Reminder`,
+            body: names,
+            url: '/tracker.html'
+          }).catch(e => console.error('Habit reminder push error:', e));
+        }
+      } catch (e) { console.error('Reminder check error:', e); }
+    }, 60000);
   } catch (error) {
     console.error('Failed to start server:', error);
     process.exit(1);

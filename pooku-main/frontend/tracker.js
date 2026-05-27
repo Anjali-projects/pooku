@@ -90,8 +90,56 @@ async function apiCall(endpoint, method = 'GET', body = null, retries = 2) {
       }
       showToast('Unable to reach server. Please try again.');
       setSyncStatus('error');
+      // Queue mutations for offline sync
+      if (method !== 'GET') {
+        addToSyncQueue(endpoint, method, body);
+        showToast('Saved offline \u2014 will sync when connected');
+      }
       return null;
     }
+  }
+}
+
+// ============ OFFLINE SYNC QUEUE ============
+const SYNC_QUEUE_KEY = 'pooku_sync_queue';
+
+function getSyncQueue() {
+  try { return JSON.parse(localStorage.getItem(SYNC_QUEUE_KEY) || '[]'); } catch { return []; }
+}
+
+function addToSyncQueue(endpoint, method, body) {
+  const queue = getSyncQueue();
+  queue.push({ endpoint, method, body, timestamp: Date.now() });
+  localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(queue));
+}
+
+async function flushSyncQueue() {
+  const queue = getSyncQueue();
+  if (queue.length === 0) return;
+  setSyncStatus('loading');
+  const remaining = [];
+  for (const item of queue) {
+    try {
+      const token = localStorage.getItem('token');
+      const opts = {
+        method: item.method,
+        headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }
+      };
+      if (item.body) opts.body = JSON.stringify(item.body);
+      const res = await fetch(`${API_URL}${item.endpoint}`, opts);
+      if (!res.ok) remaining.push(item);
+    } catch {
+      remaining.push(item);
+      break; // still offline
+    }
+  }
+  localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(remaining));
+  if (remaining.length === 0) {
+    setSyncStatus('ok');
+    showToast('Changes synced!');
+    loadHabits(); loadTodayLog(); loadAllLogs();
+  } else {
+    setSyncStatus('error');
   }
 }
 
@@ -144,6 +192,10 @@ async function loadStreaks() {
 
 // HABIT FUNCTIONS
 window.toggleHabit = async function (id) {
+  // U1: Immediate visual feedback
+  const card = document.querySelector(`.habit-card[onclick*="${id}"]`) || event?.target?.closest('.habit-card');
+  if (card) card.style.opacity = '0.6';
+
   const key = todayKey();
   const result = await apiCall('/logs/toggle', 'POST', { habitId: id, logDate: key });
 
@@ -159,6 +211,8 @@ window.toggleHabit = async function (id) {
 
     // Check for 100% completion → confetti
     checkCelebration();
+  } else if (card) {
+    card.style.opacity = '1';
   }
 };
 
@@ -169,7 +223,10 @@ window.selectMood = function (btn, mood) {
 };
 
 window.saveDay = async function () {
+  const btn = event?.target;
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
   await saveLogData();
+  if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
   showToast('Saved! Great job today');
 };
 
@@ -226,6 +283,8 @@ function renderToday() {
   const isWeekend = todayDow === 0 || todayDow === 6;
 
   const todayHabits = habits.filter(h => {
+    // F5: Skip paused habits
+    if (h.paused_until && h.paused_until >= todayKey()) return false;
     const freq = h.frequency || 'daily';
     if (freq === 'daily') return true;
     if (freq === 'weekdays') return isWeekday;
@@ -257,6 +316,7 @@ function renderToday() {
       const noteKey = `${key}_${h.id}`;
       const hasNote = habitNotes[noteKey] ? ' has-note' : '';
       const whyHtml = h.my_why ? `<div class="habit-why">${escapeHtml(h.my_why)}</div>` : '';
+      const whyHint = h.my_why ? ' <span class="why-hint">hold for why</span>' : '';
       const growthPct = Math.min(streak, plant.nextAt) / plant.nextAt * 100;
       const plantBar = streak > 0 ? `<div class="plant-growth-bar"><div class="plant-growth-fill" style="width:${growthPct}%"></div></div>` : '';
       const card = document.createElement('div');
@@ -264,7 +324,7 @@ function renderToday() {
       card.setAttribute('tabindex', '0');
       card.setAttribute('role', 'button');
       card.setAttribute('aria-label', `${h.name} - ${done ? 'completed' : 'not completed'}. ${streakText}`);
-      card.innerHTML = `<div class="habit-icon ${getIconCategory(h.icon)}">${h.icon}</div><div class="habit-info"><div class="habit-name">${escapeHtml(h.name)}</div><div class="habit-streak">${streakText}</div>${plantBar}${whyHtml}</div><button class="habit-note-btn${hasNote}" onclick="event.stopPropagation();openHabitNote(${h.id}, '${escapeHtml(h.name).replace(/'/g, "\\'")}')" title="Add note" aria-label="Add note for ${escapeHtml(h.name)}">📝</button><div class="habit-check"><span class="checkmark">✓</span></div>`;
+      card.innerHTML = `<div class="habit-icon ${getIconCategory(h.icon)}">${h.icon}</div><div class="habit-info"><div class="habit-name">${escapeHtml(h.name)}${whyHint}</div><div class="habit-streak">${streakText}</div>${plantBar}${whyHtml}</div><button class="habit-note-btn${hasNote}" onclick="event.stopPropagation();openHabitNote(${h.id}, '${escapeHtml(h.name).replace(/'/g, "\\'")}')" title="Add note" aria-label="Add note for ${escapeHtml(h.name)}">📝</button><div class="habit-check"><span class="checkmark">✓</span></div>`;
       card.onclick = () => toggleHabit(h.id);
       if (h.my_why) {
         let pressTimer;
@@ -328,12 +388,25 @@ function renderManage() {
     list.innerHTML = getEmptyManageHtml();
   }
 
-  habits.forEach(h => {
+  habits.forEach((h, idx) => {
     const freqLabel = FREQ_LABELS[h.frequency] || 'Daily';
     const freqBadge = h.frequency && h.frequency !== 'daily' ? `<span class="habit-freq">${freqLabel}</span>` : '';
+    const isPaused = h.paused_until && h.paused_until >= todayKey();
+    const pauseLabel = isPaused ? `<span class="pause-badge">⏸ until ${h.paused_until}</span>` : '';
+    const pauseBtn = isPaused
+      ? `<button class="btn-pause" onclick="resumeHabit(${h.id})" title="Resume">▶</button>`
+      : `<button class="btn-pause" onclick="pauseHabit(${h.id})" title="Pause">⏸</button>`;
     const card = document.createElement('div');
-    card.className = 'manage-card';
-    card.innerHTML = `<div class="manage-icon">${h.icon}</div><div class="manage-name">${escapeHtml(h.name)}${freqBadge}</div><button class="manage-del" onclick="openEditHabit(${h.id}, '${escapeHtml(h.name).replace(/'/g, "\\'")}', '${h.icon}')" title="Edit" aria-label="Edit ${escapeHtml(h.name)}" style="color:var(--accent-dark);">✎</button><button class="btn-archive" onclick="archiveHabit(${h.id})" title="Archive" aria-label="Archive ${escapeHtml(h.name)}">📦</button><button class="manage-del" onclick="deleteHabit(${h.id})" title="Delete" aria-label="Delete ${escapeHtml(h.name)}">×</button>`;
+    card.className = 'manage-card' + (isPaused ? ' paused' : '');
+    card.draggable = true;
+    card.dataset.habitId = h.id;
+    card.dataset.idx = idx;
+    card.innerHTML = `<span class="drag-handle" title="Drag to reorder">☰</span><div class="manage-icon">${h.icon}</div><div class="manage-name">${escapeHtml(h.name)}${freqBadge}${pauseLabel}</div>${pauseBtn}<button class="manage-del" onclick="openEditHabit(${h.id}, '${escapeHtml(h.name).replace(/'/g, "\\'")}', '${h.icon}')" title="Edit" aria-label="Edit ${escapeHtml(h.name)}" style="color:var(--accent-dark);">✎</button><button class="btn-archive" onclick="archiveHabit(${h.id})" title="Archive" aria-label="Archive ${escapeHtml(h.name)}">📦</button><button class="manage-del" onclick="deleteHabit(${h.id})" title="Delete" aria-label="Delete ${escapeHtml(h.name)}">×</button>`;
+    // Drag & drop handlers
+    card.addEventListener('dragstart', handleDragStart);
+    card.addEventListener('dragover', handleDragOver);
+    card.addEventListener('drop', handleDrop);
+    card.addEventListener('dragend', handleDragEnd);
     list.appendChild(card);
   });
 
@@ -361,6 +434,15 @@ function renderManage() {
 
 async function renderProgress() {
   const stats = await apiCall('/stats');
+
+  // Empty state: no data yet
+  if (!stats || (stats.daysTracked === 0 && stats.totalCompleted === 0)) {
+    document.getElementById('stats-row').innerHTML = '';
+    document.getElementById('bar-chart').innerHTML = '';
+    document.getElementById('hprog-list').innerHTML = getEmptyProgressHtml();
+    return;
+  }
+
   if (stats) {
     document.getElementById('stats-row').innerHTML = `
       <div class="stat-card"><div class="stat-num">${stats.daysTracked}</div><div class="stat-label">Days tracked</div></div>
@@ -379,8 +461,9 @@ async function renderProgress() {
     const k = d.toISOString().slice(0, 10);
     const log = allLogs[k];
     const done = log ? (log.done || []).length : 0;
-    const tot = habits.length || 1;
-    const pct = Math.round((done / tot) * 100);
+    // Use that day's actual completed+not-done count, not current habit count
+    const tot = log ? Math.max((log.done || []).length, 1) : (habits.length || 1);
+    const pct = done > 0 ? Math.min(Math.round((done / Math.max(habits.length, done)) * 100), 100) : 0;
 
     const w = document.createElement('div');
     w.className = 'bar-wrap';
@@ -417,8 +500,16 @@ async function renderProgress() {
 
 // VIEW SWITCHING
 const VIEW_LIST = ['today', 'manage', 'progress', 'calendar', 'reminders', 'analytics', 'friends', 'settings'];
+let currentView = 'today';
 
-window.switchView = function (v) {
+window.switchView = function (v, pushState = true) {
+  // U4: Auto-save journal if leaving today view with unsaved text
+  if (currentView === 'today') {
+    const journal = document.getElementById('journal-box');
+    if (journal && journal.value.trim()) saveLogData();
+  }
+  currentView = v;
+
   document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(el => { el.classList.remove('active'); el.setAttribute('aria-selected', 'false'); });
   document.getElementById('view-' + v).classList.add('active');
@@ -426,14 +517,23 @@ window.switchView = function (v) {
   activeTab.classList.add('active');
   activeTab.setAttribute('aria-selected', 'true');
 
+  // U5: Browser back button support
+  if (pushState) history.pushState({ view: v }, '', `#${v}`);
+
   if (v === 'progress') { showSkeleton('stats-row', 'cards'); showSkeleton('bar-chart', 'bars'); renderProgress(); }
-  if (v === 'manage') renderManage();
+  if (v === 'manage') { renderManage(); setTimeout(initTouchDrag, 100); }
   if (v === 'calendar') renderCalendar();
   if (v === 'reminders') renderReminders();
   if (v === 'analytics') { showSkeleton('analytics-list', 'cards'); renderAnalytics(); loadMoodTrends(30); }
-  if (v === 'friends') renderFriends();
+  if (v === 'friends') { renderFriends(); fetchUnreadCounts(); }
   if (v === 'settings') renderSettings();
 };
+
+// U5: Handle browser back/forward buttons
+window.addEventListener('popstate', (e) => {
+  const view = e.state?.view || location.hash.replace('#', '') || 'today';
+  if (VIEW_LIST.includes(view)) switchView(view, false);
+});
 
 // NOTIFICATION
 window.openNotifModal = () => { document.getElementById('notif-modal').classList.add('open'); trapFocus(document.getElementById('notif-modal')); };
@@ -452,6 +552,8 @@ window.setReminder = function () {
         document.getElementById('notif-btn').textContent = 'Reminder on';
         closeModal('notif-modal');
         showToast('Reminder set!');
+        // Sync push reminder time with server (F3)
+        apiCall('/push/reminder-time', 'POST', { time }).catch(() => {});
       } else {
         showToast('Allow notifications in browser settings');
       }
@@ -482,6 +584,15 @@ window.logout = async function () {
     const token = localStorage.getItem('token');
     await fetch(`${API_URL}/auth/logout`, { method: 'POST', headers: token ? { 'Authorization': `Bearer ${token}` } : {} });
   } catch (e) { /* ignore */ }
+  // Close SSE connection
+  if (chatSSE) { chatSSE.close(); chatSSE = null; }
+  // Clear all caches (prevents data leaking on shared devices)
+  if ('caches' in window) {
+    try {
+      const names = await caches.keys();
+      await Promise.all(names.map(n => caches.delete(n)));
+    } catch(e) { /* ignore */ }
+  }
   localStorage.removeItem('authenticated');
   localStorage.removeItem('userId');
   localStorage.removeItem('username');
@@ -598,11 +709,14 @@ async function init() {
   try { checkFloatingJournal(); } catch(e) { console.error('Journal float error:', e); }
   try { checkWeeklyReflection(); } catch(e) { console.error('Reflection error:', e); }
   try { connectChatSSE(); } catch(e) { console.error('Chat SSE error:', e); }
+  try { fetchUnreadCounts(); } catch(e) { console.error('Unread counts error:', e); }
 
   try { initThemeColor(); } catch(e) { console.error('Theme color error:', e); }
   try { setupTypingIndicator(); } catch(e) { console.error('Typing indicator error:', e); }
   try { scheduleWeeklySummary(); } catch(e) { console.error('Weekly summary error:', e); }
-  try { flushSyncQueue(); } catch(e) { console.error('Sync queue error:', e); }
+  // offline sync queue removed (was dead code)
+  // Flush any queued offline mutations
+  try { if (navigator.onLine) flushSyncQueue(); } catch(e) { console.error('Sync queue flush error:', e); }
   try { showEveningSummary(); } catch(e) { console.error('Evening summary error:', e); }
   try { checkStreakFreezeEarned(); } catch(e) { console.error('Streak freeze error:', e); }
   try { applySeasonalTheme(); } catch(e) { console.error('Seasonal theme error:', e); }
@@ -617,10 +731,14 @@ async function init() {
     document.getElementById('notif-btn').textContent = 'Reminder on';
   }
 
+  // Load per-habit reminders and start client-side notification interval
+  try { await loadHabitReminders(); } catch(e) { console.error('Load reminders error:', e); }
+  startPerHabitReminderInterval();
+
   // PWA shortcut hash routing
   const hash = window.location.hash.replace('#', '');
-  if (hash && ['today','manage','progress','calendar','reminders','analytics','friends','settings'].includes(hash)) {
-    switchView(hash);
+  if (hash && VIEW_LIST.includes(hash)) {
+    switchView(hash, false);
   }
 }
 
@@ -670,6 +788,16 @@ window.renderCalendar = async function() {
     const completedCount = log ? (log.done || []).length : 0;
     const totalHabits = habits.length || 1;
 
+    // Apply heat-map coloring based on completion percentage
+    const completionPct = totalHabits > 0 ? completedCount / totalHabits : 0;
+    if (completedCount > 0) {
+      if (completionPct >= 1) dayEl.classList.add('heat-4');
+      else if (completionPct >= 0.75) dayEl.classList.add('heat-3');
+      else if (completionPct >= 0.5) dayEl.classList.add('heat-2');
+      else if (completionPct >= 0.25) dayEl.classList.add('heat-1');
+      else dayEl.classList.add('heat-0');
+    }
+
     let habitsHTML = '';
     if (log && log.done && log.done.length > 0) {
       habits.forEach(h => {
@@ -679,10 +807,13 @@ window.renderCalendar = async function() {
       });
     }
 
+    // U7: Colorblind-friendly completion indicator
+    const completionIcon = completedCount === totalHabits && completedCount > 0 ? '✓' : (completedCount > 0 ? '●' : '');
+
     dayEl.innerHTML = `
       <div class="day-num">${day}</div>
       <div class="day-habits">${habitsHTML}</div>
-      ${completedCount > 0 ? `<div style="font-size:9px;color:var(--success);margin-top:1px;font-weight:500;">${completedCount}/${totalHabits}</div>` : ''}
+      ${completedCount > 0 ? `<div style="font-size:9px;color:var(--success);margin-top:1px;font-weight:600;">${completionIcon} ${completedCount}/${totalHabits}</div>` : ''}
     `;
     dayEl.onclick = () => showDayDetail(dateStr, day);
     grid.appendChild(dayEl);
@@ -718,6 +849,26 @@ window.nextMonth = function() {
 };
 
 // REMINDERS
+async function loadHabitReminders() {
+  const data = await apiCall('/reminders');
+  if (data) habitReminders = data;
+}
+
+function startPerHabitReminderInterval() {
+  if (perHabitReminderInterval) clearInterval(perHabitReminderInterval);
+  if (Notification.permission !== 'granted') return;
+  perHabitReminderInterval = setInterval(() => {
+    if (!habitReminders.length) return;
+    const now = new Date();
+    const cur = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    const due = habitReminders.filter(r => r.enabled && r.reminder_time === cur);
+    if (due.length > 0) {
+      const names = due.map(r => `${r.icon || ''} ${r.name || 'Habit'}`).join(', ');
+      new Notification('Pooku Reminder', { body: names, icon: '/pooku.png' });
+    }
+  }, 60000);
+}
+
 window.renderReminders = async function() {
   const reminders = await apiCall('/reminders');
   if (!reminders) return;
@@ -752,9 +903,11 @@ window.saveReminder = async function(habitId, time) {
   await apiCall('/reminders', 'POST', { habitId, reminderTime: time, enabled: 1 });
   showToast('Reminder saved!');
   renderReminders();
+  loadHabitReminders(); // refresh local cache for client-side notifications
 };
 
 window.deleteReminder = async function(habitId) {
+  if (!confirm('Delete this reminder?')) return;
   await apiCall(`/reminders/${habitId}`, 'DELETE');
   showToast('Reminder deleted');
   renderReminders();
@@ -799,7 +952,7 @@ window.renderAnalytics = async function() {
   });
 
   if (Object.keys(analytics.habitStats).length === 0) {
-    list.innerHTML = '<p style="text-align:center;color:var(--muted);padding:2rem;">No data yet. Start tracking habits to see analytics!</p>';
+    list.innerHTML = getEmptyAnalyticsHtml();
   }
 };
 
@@ -807,13 +960,14 @@ window.renderAnalytics = async function() {
 
 let currentChatFriendId = null;
 let chatPollInterval = null;
+let unreadCounts = {}; // { friendId: count }
 
 window.searchFriends = async function() {
   const query = document.getElementById('friend-search-input').value.trim();
   const container = document.getElementById('search-results');
-  if (!query || query.length < 2) {
+  if (!query || query.length < 3) {
     container.innerHTML = '';
-    showToast('Type at least 2 characters');
+    showToast('Type at least 3 characters');
     return;
   }
 
@@ -994,6 +1148,9 @@ window.closeFriendProgress = function() {
 // Chat / Messaging
 window.openFriendChat = async function(friendId, username) {
   currentChatFriendId = friendId;
+  // Clear unread for this friend
+  delete unreadCounts[friendId];
+  updateUnreadBadges();
 
   document.getElementById('friends-main-panel').style.display = 'none';
   document.getElementById('friend-progress-panel').style.display = 'none';
@@ -1263,6 +1420,7 @@ window.saveHabitNote = async function() {
 };
 
 window.declineFriend = async function(friendId) {
+  if (!confirm('Decline this friend request?')) return;
   const result = await apiCall(`/friends/${friendId}`, 'DELETE');
   if (result) {
     showToast('Request declined');
@@ -1565,6 +1723,8 @@ window.renderSettings = async function() {
   renderBadges(stats);
   // Render color picker
   renderColorPicker();
+  // Check push notification status
+  checkPushStatus();
 };
 
 window.changePassword = async function() {
@@ -1577,6 +1737,212 @@ window.changePassword = async function() {
     showToast('Password updated!');
     document.getElementById('settings-current-pw').value = '';
     document.getElementById('settings-new-pw').value = '';
+  }
+};
+
+// ============ ACCOUNT DELETION (F2) ============
+window.deleteAccount = async function() {
+  if (!confirm('Are you sure you want to permanently delete your account? This cannot be undone.')) return;
+  const password = prompt('Enter your password to confirm:');
+  if (!password) return;
+  try {
+    const res = await fetch(`${API_URL}/auth/account`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+      body: JSON.stringify({ password })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      showToast('Account deleted. Goodbye!');
+      localStorage.clear();
+      setTimeout(() => { window.location.href = 'login.html'; }, 1500);
+    } else {
+      showToast(data.error || 'Failed to delete account', true);
+    }
+  } catch (e) {
+    showToast('Failed to delete account', true);
+  }
+};
+
+// ============ PUSH NOTIFICATIONS (F3) ============
+window.togglePushNotifications = async function() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    showToast('Push notifications not supported in this browser');
+    return;
+  }
+  const reg = await navigator.serviceWorker.ready;
+  const existing = await reg.pushManager.getSubscription();
+  if (existing) {
+    // Unsubscribe
+    await existing.unsubscribe();
+    await apiCall('/push/subscribe', 'DELETE', { endpoint: existing.endpoint });
+    showToast('Push notifications disabled');
+    updatePushUI(false);
+  } else {
+    // Subscribe
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') { showToast('Notification permission denied'); return; }
+    try {
+      const vapidRes = await fetch(`${API_URL}/push/vapid-key`);
+      const { publicKey } = await vapidRes.json();
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey)
+      });
+      const subJSON = sub.toJSON();
+      await apiCall('/push/subscribe', 'POST', { endpoint: subJSON.endpoint, keys: subJSON.keys });
+      // Also sync current reminder time
+      const savedTime = localStorage.getItem('reminderTime');
+      if (savedTime) await apiCall('/push/reminder-time', 'POST', { time: savedTime });
+      showToast('Push notifications enabled!');
+      updatePushUI(true);
+    } catch (e) {
+      console.error('Push subscribe error:', e);
+      showToast('Failed to enable push notifications');
+    }
+  }
+};
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+
+function updatePushUI(enabled) {
+  const btn = document.getElementById('push-toggle-btn');
+  const label = document.getElementById('push-status-label');
+  if (btn) {
+    btn.textContent = enabled ? 'Disable Push' : 'Enable Push';
+    btn.classList.toggle('danger', enabled);
+  }
+  if (label) label.textContent = enabled ? 'Active \u2014 you will get reminders even when the tab is closed' : '';
+}
+
+async function checkPushStatus() {
+  if (!('PushManager' in window)) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    updatePushUI(!!sub);
+  } catch(e) { /* ignore */ }
+}
+
+// ============ DRAG & DROP REORDERING (F4) ============
+let dragSrcEl = null;
+
+function handleDragStart(e) {
+  dragSrcEl = this;
+  this.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', this.dataset.idx);
+}
+
+function handleDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const card = e.target.closest('.manage-card');
+  if (card && card !== dragSrcEl) {
+    card.classList.add('drag-over');
+  }
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  const card = e.target.closest('.manage-card');
+  if (!card || card === dragSrcEl) return;
+  const fromIdx = parseInt(dragSrcEl.dataset.idx);
+  const toIdx = parseInt(card.dataset.idx);
+  if (isNaN(fromIdx) || isNaN(toIdx) || fromIdx === toIdx) return;
+  // Reorder the habits array
+  const [moved] = habits.splice(fromIdx, 1);
+  habits.splice(toIdx, 0, moved);
+  // Send new order to server
+  const order = habits.map(h => h.id);
+  apiCall('/habits/reorder', 'PATCH', { order });
+  renderManage();
+  showToast('Habits reordered');
+}
+
+function handleDragEnd() {
+  this.classList.remove('dragging');
+  document.querySelectorAll('.manage-card').forEach(c => c.classList.remove('drag-over'));
+}
+
+// Touch-based reordering for mobile
+let touchDragEl = null, touchStartY = 0, touchClone = null;
+
+function initTouchDrag() {
+  const list = document.getElementById('manage-list');
+  if (!list) return;
+  list.addEventListener('touchstart', e => {
+    const handle = e.target.closest('.drag-handle');
+    if (!handle) return;
+    const card = handle.closest('.manage-card');
+    if (!card) return;
+    touchDragEl = card;
+    touchStartY = e.touches[0].clientY;
+    card.classList.add('dragging');
+  }, { passive: true });
+
+  list.addEventListener('touchmove', e => {
+    if (!touchDragEl) return;
+    e.preventDefault();
+    const y = e.touches[0].clientY;
+    const cards = [...list.querySelectorAll('.manage-card')];
+    cards.forEach(c => c.classList.remove('drag-over'));
+    const target = document.elementFromPoint(e.touches[0].clientX, y)?.closest('.manage-card');
+    if (target && target !== touchDragEl) target.classList.add('drag-over');
+  }, { passive: false });
+
+  list.addEventListener('touchend', e => {
+    if (!touchDragEl) return;
+    const y = e.changedTouches[0].clientY;
+    const target = document.elementFromPoint(e.changedTouches[0].clientX, y)?.closest('.manage-card');
+    touchDragEl.classList.remove('dragging');
+    document.querySelectorAll('.manage-card').forEach(c => c.classList.remove('drag-over'));
+    if (target && target !== touchDragEl) {
+      const fromIdx = parseInt(touchDragEl.dataset.idx);
+      const toIdx = parseInt(target.dataset.idx);
+      if (!isNaN(fromIdx) && !isNaN(toIdx) && fromIdx !== toIdx) {
+        const [moved] = habits.splice(fromIdx, 1);
+        habits.splice(toIdx, 0, moved);
+        apiCall('/habits/reorder', 'PATCH', { order: habits.map(h => h.id) });
+        renderManage();
+        showToast('Habits reordered');
+      }
+    }
+    touchDragEl = null;
+  }, { passive: true });
+}
+
+// ============ PAUSE / VACATION MODE (F5) ============
+window.pauseHabit = async function(habitId) {
+  const days = prompt('Pause for how many days? (1–90)', '7');
+  if (!days) return;
+  const d = parseInt(days);
+  if (isNaN(d) || d < 1 || d > 90) { showToast('Enter a number between 1 and 90'); return; }
+  const pauseUntil = new Date(Date.now() + d * 86400000).toISOString().split('T')[0];
+  const result = await apiCall(`/habits/${habitId}/pause`, 'PATCH', { pauseUntil });
+  if (result) {
+    const h = habits.find(x => x.id === habitId);
+    if (h) h.paused_until = pauseUntil;
+    renderManage();
+    showToast(`Habit paused until ${pauseUntil}`);
+  }
+};
+
+window.resumeHabit = async function(habitId) {
+  const result = await apiCall(`/habits/${habitId}/pause`, 'PATCH', { pauseUntil: null });
+  if (result) {
+    const h = habits.find(x => x.id === habitId);
+    if (h) h.paused_until = null;
+    renderManage();
+    showToast('Habit resumed!');
   }
 };
 
@@ -1743,55 +2109,16 @@ async function sendMonthlySummaryNotif() {
 }
 
 // ============ OFFLINE SYNC QUEUE ============
-let syncQueue = JSON.parse(localStorage.getItem('syncQueue') || '[]');
-
-async function apiCallWithQueue(endpoint, method = 'GET', body = null) {
-  // For GET requests, just use normal apiCall
-  if (method === 'GET') return apiCall(endpoint, method, body);
-
-  try {
-    const result = await apiCall(endpoint, method, body);
-    if (result) return result;
-    throw new Error('API returned null');
-  } catch (e) {
-    // Queue failed mutations for later sync
-    syncQueue.push({ endpoint, method, body, timestamp: Date.now() });
-    localStorage.setItem('syncQueue', JSON.stringify(syncQueue));
-    showToast('Saved offline — will sync when connected');
-    return { _queued: true };
-  }
-}
-
-async function flushSyncQueue() {
-  if (syncQueue.length === 0) return;
-  const queue = [...syncQueue];
-  syncQueue = [];
-  localStorage.setItem('syncQueue', '[]');
-  let failed = [];
-  for (const item of queue) {
-    try {
-      const result = await apiCall(item.endpoint, item.method, item.body);
-      if (!result) failed.push(item);
-    } catch (e) {
-      failed.push(item);
-    }
-  }
-  if (failed.length > 0) {
-    syncQueue = failed;
-    localStorage.setItem('syncQueue', JSON.stringify(syncQueue));
-  } else if (queue.length > 0) {
-    showToast(`Synced ${queue.length} offline action${queue.length > 1 ? 's' : ''}!`);
-  }
-}
+// Queue is now implemented above apiCall
 
 // Listen for coming back online
 window.addEventListener('online', () => {
-  showToast('Back online!');
+  showToast('Back online \u2014 syncing...');
   flushSyncQueue();
 });
 
 window.addEventListener('offline', () => {
-  showToast('You\'re offline — changes will sync later');
+  showToast('You\'re offline \u2014 mutations will be queued');
   setSyncStatus('error');
 });
 
@@ -1955,13 +2282,17 @@ window.dismissEvening = function() {
   if (slot) slot.innerHTML = '';
 };
 
-// ============ STREAK FREEZE ============
-let streakFreezes = parseInt(localStorage.getItem('streakFreezes') || '0');
-let lastPerfectCheck = localStorage.getItem('lastPerfectCheck') || '';
+// ============ STREAK FREEZE (server-side) ============
+let streakFreezes = 0;
 
-function checkStreakFreezeEarned() {
+async function checkStreakFreezeEarned() {
+  // Auto-apply freezes to missed days first
+  const autoResult = await apiCall('/streak-freezes/auto-apply', 'POST');
+  if (autoResult && autoResult.applied && autoResult.applied.length > 0) {
+    showToast(`❄️ Streak Freeze auto-applied for ${autoResult.applied.length} missed day(s)!`);
+  }
+
   const key = todayKey();
-  if (lastPerfectCheck === key) return; // Already checked today
 
   // Count consecutive perfect days (last 7 days)
   let perfectDays = 0;
@@ -1979,18 +2310,19 @@ function checkStreakFreezeEarned() {
   }
 
   if (perfectDays >= 7) {
-    const lastEarned = localStorage.getItem('lastFreezeEarned') || '';
-    if (lastEarned !== key) {
-      streakFreezes++;
-      localStorage.setItem('streakFreezes', streakFreezes.toString());
-      localStorage.setItem('lastFreezeEarned', key);
+    const result = await apiCall('/streak-freezes/earn', 'POST');
+    if (result && !result.alreadyEarned) {
+      streakFreezes = result.count;
       showToast('❄️ You earned a Streak Freeze! (7 perfect days)');
+    } else if (result) {
+      streakFreezes = result.count;
     }
+  } else {
+    // Just fetch current count
+    const data = await apiCall('/streak-freezes');
+    if (data) streakFreezes = data.count;
   }
-  lastPerfectCheck = key;
-  localStorage.setItem('lastPerfectCheck', key);
 
-  // Update streak freeze display
   updateStreakFreezeDisplay();
 }
 
@@ -1999,28 +2331,29 @@ function updateStreakFreezeDisplay() {
   if (existing) existing.remove();
 
   if (streakFreezes > 0) {
-    const badge = document.createElement('span');
-    badge.id = 'streak-freeze-info';
-    badge.className = 'streak-freeze-badge';
-    badge.innerHTML = `❄️ ${streakFreezes}`;
-    badge.title = `${streakFreezes} Streak Freeze${streakFreezes > 1 ? 's' : ''} available — protects your streak if you miss a day`;
-    const progressText = document.querySelector('.progress-text');
-    if (progressText) {
-      const sub = document.getElementById('progress-sub');
-      if (sub) sub.appendChild(badge);
+    const sub = document.getElementById('progress-sub');
+    if (sub) {
+      const badge = document.createElement('span');
+      badge.id = 'streak-freeze-info';
+      badge.className = 'streak-freeze-badge';
+      badge.innerHTML = ` ❄️ ${streakFreezes}`;
+      badge.title = `${streakFreezes} Streak Freeze${streakFreezes > 1 ? 's' : ''} available \u2014 auto-protects your streak if you miss a day`;
+      sub.appendChild(badge);
     }
   }
 }
 
-window.useStreakFreeze = async function(habitId) {
+window.useStreakFreeze = async function() {
   if (streakFreezes <= 0) {
     showToast('No streak freezes available. Earn one with 7 perfect days!');
     return;
   }
-  streakFreezes--;
-  localStorage.setItem('streakFreezes', streakFreezes.toString());
-  showToast('❄️ Streak Freeze used! Your streak is protected.');
-  updateStreakFreezeDisplay();
+  const result = await apiCall('/streak-freezes/use', 'POST');
+  if (result) {
+    streakFreezes = result.count;
+    showToast('❄️ Streak Freeze used! Your streak is protected.');
+    updateStreakFreezeDisplay();
+  }
 };
 
 // ============ EMPTY STATES FOR OTHER VIEWS ============
@@ -2335,12 +2668,13 @@ function renderGroupedHabits(todayHabits, log, key) {
         const noteKey = `${key}_${h.id}`;
         const hasNote = habitNotes[noteKey] ? ' has-note' : '';
         const whyHtml = h.my_why ? `<div class="habit-why">${escapeHtml(h.my_why)}</div>` : '';
+        const whyHint = h.my_why ? ' <span class="why-hint">hold for why</span>' : '';
         const growthPct = Math.min(streak, plant.nextAt) / plant.nextAt * 100;
         const plantBar = streak > 0 ? `<div class="plant-growth-bar"><div class="plant-growth-fill" style="width:${growthPct}%"></div></div>` : '';
         const card = document.createElement('div');
         card.className = 'habit-card' + (done ? ' done' : '');
         card.setAttribute('tabindex', '0');
-        card.innerHTML = `<div class="habit-icon ${getIconCategory(h.icon)}">${h.icon}</div><div class="habit-info"><div class="habit-name">${escapeHtml(h.name)}</div><div class="habit-streak">${streakText}</div>${plantBar}${whyHtml}</div><button class="habit-note-btn${hasNote}" onclick="event.stopPropagation();openHabitNote(${h.id}, '${escapeHtml(h.name).replace(/'/g, "\\'")}')" title="Add note">📝</button><div class="habit-check"><span class="checkmark">✓</span></div>`;
+        card.innerHTML = `<div class="habit-icon ${getIconCategory(h.icon)}">${h.icon}</div><div class="habit-info"><div class="habit-name">${escapeHtml(h.name)}${whyHint}</div><div class="habit-streak">${streakText}</div>${plantBar}${whyHtml}</div><button class="habit-note-btn${hasNote}" onclick="event.stopPropagation();openHabitNote(${h.id}, '${escapeHtml(h.name).replace(/'/g, "\\'")}')" title="Add note">📝</button><div class="habit-check"><span class="checkmark">✓</span></div>`;
         card.onclick = () => toggleHabit(h.id);
         // Long-press to expand "my why"
         if (h.my_why) {
@@ -2487,11 +2821,23 @@ window.saveReflection = async function() {
 // ============ SSE CHAT (#21) ============
 let chatSSE = null;
 
-function connectChatSSE() {
+async function connectChatSSE() {
   if (chatSSE) return;
   const token = localStorage.getItem('token');
   if (!token) return;
-  chatSSE = new EventSource(`${API_URL}/messages/stream?token=${encodeURIComponent(token)}`);
+  // Get a short-lived ticket so the JWT isn't exposed in the URL
+  let url;
+  try {
+    const res = await apiCall('/messages/sse-ticket', 'POST');
+    if (res && res.ticket) {
+      url = `${API_URL}/messages/stream?ticket=${encodeURIComponent(res.ticket)}`;
+    }
+  } catch(e) { /* fallback below */ }
+  if (!url) {
+    // Fallback to token if ticket endpoint not available
+    url = `${API_URL}/messages/stream?token=${encodeURIComponent(token)}`;
+  }
+  chatSSE = new EventSource(url);
 
   chatSSE.addEventListener('new-message', (e) => {
     try {
@@ -2499,6 +2845,15 @@ function connectChatSSE() {
       // If we're in a chat with this person, append the message
       if (currentChatFriendId && (msg.sender_id == currentChatFriendId || msg.receiver_id == currentChatFriendId)) {
         appendChatMessage(msg);
+      } else if (msg.sender_id != currentUserId) {
+        // Message from someone else while not in their chat — track as unread
+        const sid = msg.sender_id;
+        unreadCounts[sid] = (unreadCounts[sid] || 0) + 1;
+        updateUnreadBadges();
+        // Browser notification
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('Pooku', { body: `New message from a friend`, icon: 'https://pooku.vercel.app/favicon.ico' });
+        }
       }
     } catch(err) { console.error('SSE parse error:', err); }
   });
@@ -2529,6 +2884,43 @@ function appendChatMessage(m) {
   bubble.innerHTML = `${escapeHtml(m.message)}<span class="chat-time">${time} ${readIcon}</span>`;
   container.appendChild(bubble);
   container.scrollTop = container.scrollHeight;
+}
+
+// ============ UNREAD BADGE HELPERS ============
+async function fetchUnreadCounts() {
+  const counts = await apiCall('/messages/unread-counts');
+  if (!counts) return;
+  unreadCounts = {};
+  counts.forEach(c => { unreadCounts[c.sender_id] = c.count; });
+  updateUnreadBadges();
+}
+
+function updateUnreadBadges() {
+  const total = Object.values(unreadCounts).reduce((a, b) => a + b, 0);
+  const badge = document.getElementById('friends-tab-badge');
+  if (badge) {
+    if (total > 0) {
+      badge.textContent = total > 99 ? '99+' : total;
+      badge.style.display = 'flex';
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+  // Update individual friend cards
+  document.querySelectorAll('.friend-card').forEach(card => {
+    const existing = card.querySelector('.friend-unread-badge');
+    if (existing) existing.remove();
+  });
+  Object.entries(unreadCounts).forEach(([fid, count]) => {
+    if (count <= 0) return;
+    const chatBtn = document.querySelector(`.friend-card .btn-chat[onclick*="openFriendChat(${fid}"]`);
+    if (chatBtn) {
+      const b = document.createElement('span');
+      b.className = 'friend-unread-badge';
+      b.textContent = count > 99 ? '99+' : count;
+      chatBtn.closest('.friend-card').querySelector('.friend-details').appendChild(b);
+    }
+  });
 }
 
 // ============ HABIT TEMPLATE PACKS (#22) ============
@@ -2620,13 +3012,13 @@ function applySeasonalTheme() {
 
 // ═══ #32 GARDEN METAPHOR ═══
 function getPlantStage(streak, isDoneToday) {
-  // If streak is 0 and not done today, show wilted
-  if (streak === 0 && !isDoneToday) return { emoji: '🌱', label: 'Seed', nextAt: 3 };
   if (streak >= 100) return { emoji: '🌳', label: 'Mighty tree', nextAt: 100 };
   if (streak >= 30) return { emoji: '🌲', label: 'Tree', nextAt: 100 };
   if (streak >= 14) return { emoji: '🌻', label: 'Bloom', nextAt: 30 };
   if (streak >= 7) return { emoji: '🌿', label: 'Sapling', nextAt: 14 };
   if (streak >= 3) return { emoji: '🌱', label: 'Sprout', nextAt: 7 };
+  // Streak 0-2: seed (wilted if not done today)
+  if (streak === 0 && !isDoneToday) return { emoji: '🥀', label: 'Wilted', nextAt: 3 };
   return { emoji: '🫘', label: 'Seed', nextAt: 3 };
 }
 
@@ -2686,6 +3078,9 @@ async function loadChallenges() {
     const daysLeft = Math.max(0, Math.ceil((endDate - Date.now()) / 86400000));
     const pct = ch.duration > 0 ? Math.round((ch.my_completed_days / ch.duration) * 100) : 0;
     const isActive = daysLeft > 0;
+    // U8: Check if already logged today
+    const todayStr = new Date().toISOString().split('T')[0];
+    const loggedToday = ch.last_log_date === todayStr;
     return `<div class="challenge-card">
       <h4>${escapeHtml(ch.title)}</h4>
       <div class="ch-meta">${escapeHtml(ch.description || '')} • ${ch.duration} days • by ${escapeHtml(ch.creator_name)}</div>
@@ -2693,7 +3088,8 @@ async function loadChallenges() {
       <div class="ch-participants">${ch.my_completed_days}/${ch.duration} days done • ${ch.participant_count} participants • ${isActive ? daysLeft + ' days left' : 'Completed!'}</div>
       <div class="ch-actions">
         ${!ch.joined ? `<button class="ch-btn primary" onclick="joinChallenge(${ch.id})">Join</button>` : ''}
-        ${ch.joined && isActive ? `<button class="ch-btn primary" onclick="logChallengeDay(${ch.id})">✓ Done today</button>` : ''}
+        ${ch.joined && isActive && !loggedToday ? `<button class="ch-btn primary" onclick="logChallengeDay(${ch.id})">✓ Done today</button>` : ''}
+        ${ch.joined && isActive && loggedToday ? `<button class="ch-btn" disabled style="opacity:0.6;cursor:default;">✓ Logged today</button>` : ''}
         <button class="ch-btn" onclick="viewChallengeBoard(${ch.id})">Scoreboard</button>
       </div>
     </div>`;
@@ -2732,7 +3128,7 @@ window.viewChallengeBoard = async function(id) {
   const content = document.getElementById('day-detail-content');
   if (overlay && content) {
     content.innerHTML = html + '<div style="margin-top:12px;text-align:center;"><button class="modal-cancel" onclick="closeDayDetail()">Close</button></div>';
-    overlay.classList.add('active');
+    overlay.classList.add('open');
     trapFocus(overlay);
   }
 };

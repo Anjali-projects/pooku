@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pooku-v9';
+const CACHE_NAME = 'pooku-v16';
 const urlsToCache = [
   '/',
   '/login.html',
@@ -37,31 +37,13 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
-  // API calls - network only (API is on a different origin)
+  // API calls - network only, never cache authenticated responses
   if (url.pathname.startsWith('/api/') || url.href.includes('/api/')) {
-    if (event.request.method === 'GET') {
-      event.respondWith(
-        fetch(event.request)
-          .then(response => {
-            if (response.ok) {
-              const clone = response.clone();
-              caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-            }
-            return response;
-          })
-          .catch(() => caches.match(event.request).then(r => r || new Response('{"error":"Offline"}', { status: 503, headers: { 'Content-Type': 'application/json' } })))
-      );
-    } else {
-      // POST/PUT/DELETE/PATCH - network only, fail gracefully offline
-      event.respondWith(
-        fetch(event.request).catch(() => {
-          return new Response('{"error":"Offline - queued for sync"}', {
-            status: 503,
-            headers: { 'Content-Type': 'application/json' }
-          });
-        })
-      );
-    }
+    event.respondWith(
+      fetch(event.request)
+        .catch(() => new Response('{"error":"Offline"}', { status: 503, headers: { 'Content-Type': 'application/json' } }))
+    );
+    return;
   } else {
     // Static assets - cache first, then network
     event.respondWith(
@@ -83,4 +65,34 @@ self.addEventListener('fetch', event => {
         })
     );
   }
+});
+
+// Push notification handler (F3)
+self.addEventListener('push', event => {
+  const data = event.data ? event.data.json() : {};
+  const title = data.title || 'Pooku';
+  const options = {
+    body: data.body || 'Check your habits!',
+    icon: '/pooku.png',
+    badge: '/pooku.png',
+    data: { url: data.url || '/tracker.html' },
+    vibrate: [100, 50, 100]
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// Notification click — open/focus the app
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const url = event.notification.data?.url || '/tracker.html';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
+      for (const client of clientList) {
+        if (client.url.includes('tracker.html') && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      return clients.openWindow(url);
+    })
+  );
 });

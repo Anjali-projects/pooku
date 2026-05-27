@@ -51,7 +51,7 @@
   <button class="nav-tab" role="tab" aria-selected="false" onclick="switchView('calendar')">Calendar</button>
   <button class="nav-tab" role="tab" aria-selected="false" onclick="switchView('reminders')">Reminders</button>
   <button class="nav-tab" role="tab" aria-selected="false" onclick="switchView('analytics')">Analytics</button>
-  <button class="nav-tab" role="tab" aria-selected="false" onclick="switchView('friends')">Friends</button>
+  <button class="nav-tab" role="tab" aria-selected="false" onclick="switchView('friends')" style="position:relative;">Friends<span id="friends-tab-badge" class="unread-badge" style="display:none;"></span></button>
   <button class="nav-tab" role="tab" aria-selected="false" onclick="switchView('settings')">Settings</button>
 </nav>
 
@@ -406,6 +406,21 @@
         <button class="settings-btn" onclick="exportData()">Export CSV</button>
         <button class="settings-btn danger" onclick="resetOnboarding()">Replay Tutorial</button>
       </div>
+    </div>
+
+    <div class="settings-card">
+      <h3>Push Notifications</h3>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:8px;">Get reminders even when the app is closed</p>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <button class="settings-btn" id="push-toggle-btn" onclick="togglePushNotifications()">Enable Push</button>
+        <span style="font-size:12px;color:var(--muted);" id="push-status-label"></span>
+      </div>
+    </div>
+
+    <div class="settings-card">
+      <h3 style="color:#e07060;">Delete Account</h3>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:8px;">Permanently delete your account and all data. This cannot be undone.</p>
+      <button class="settings-btn danger" onclick="deleteAccount()">Delete My Account</button>
     </div>
   </div>
 </main>

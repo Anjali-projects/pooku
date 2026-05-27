@@ -300,7 +300,44 @@ body {
       </div>
 
       <button type="submit" class="submit-btn" id="login-btn">Login</button>
+
+      <div class="toggle-form" style="margin-top:1rem;">
+        <a onclick="showForgotPassword()">Forgot password?</a>
+      </div>
     </form>
+
+    <!-- FORGOT PASSWORD FORM -->
+    <div class="tab-content" id="forgot-form">
+      <div id="forgot-step-1">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:1.2rem;">Enter your email to receive a reset code.</p>
+        <div class="form-group">
+          <label for="forgot-email">Email</label>
+          <input type="email" id="forgot-email" placeholder="your@email.com" required>
+          <div class="error-message" id="forgot-email-error"></div>
+        </div>
+        <button type="button" class="submit-btn" id="forgot-btn" onclick="handleForgotPassword()">Send Reset Code</button>
+      </div>
+      <div id="forgot-step-2" style="display:none;">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:1.2rem;">Enter the reset code and your new password.</p>
+        <div class="form-group">
+          <label for="reset-token">Reset Code</label>
+          <input type="text" id="reset-token" placeholder="Paste reset code from email / server logs" required>
+          <div class="error-message" id="reset-token-error"></div>
+        </div>
+        <div class="form-group">
+          <label for="reset-password">New Password</label>
+          <div class="password-wrapper">
+            <input type="password" id="reset-password" placeholder="At least 6 characters" required minlength="6">
+            <button type="button" class="toggle-password" onclick="togglePasswordVisibility('reset-password', this)">👁️</button>
+          </div>
+          <div class="error-message" id="reset-password-error"></div>
+        </div>
+        <button type="button" class="submit-btn" id="reset-btn" onclick="handleResetPassword()">Reset Password</button>
+      </div>
+      <div class="toggle-form" style="margin-top:1rem;">
+        <a onclick="switchTab('login')">← Back to login</a>
+      </div>
+    </div>
 
     <!-- REGISTER FORM -->
     <form class="tab-content" id="register-form" onsubmit="handleRegister(event)">
@@ -362,10 +399,19 @@ function switchTab(tab) {
   if (tab === 'login') {
     document.querySelectorAll('.tab-btn')[0].classList.add('active');
     document.getElementById('login-form').classList.add('active');
-  } else {
+  } else if (tab === 'register') {
     document.querySelectorAll('.tab-btn')[1].classList.add('active');
     document.getElementById('register-form').classList.add('active');
   }
+  // forgot-form has no tab button — shown/hidden via showForgotPassword()
+}
+
+function showForgotPassword() {
+  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+  document.getElementById('forgot-form').classList.add('active');
+  document.getElementById('forgot-step-1').style.display = '';
+  document.getElementById('forgot-step-2').style.display = 'none';
 }
 
 function showToast(message, isError = false) {
@@ -421,7 +467,7 @@ async function handleLogin(event) {
       if (!response.ok) {
         if (data.errors) {
           data.errors.forEach(error => {
-            showError('login-' + error.param, error.msg);
+            showError('login-' + (error.path || error.param), error.msg);
           });
         } else {
           showToast(data.error || 'Login failed', true);
@@ -492,7 +538,7 @@ async function handleRegister(event) {
       if (!response.ok) {
         if (data.errors) {
           data.errors.forEach(error => {
-            showError('register-' + error.param, error.msg);
+            showError('register-' + (error.path || error.param), error.msg);
           });
         } else {
           showToast(data.error || 'Registration failed', true);
@@ -530,6 +576,63 @@ window.addEventListener('load', () => {
   // Wake up backend on Render free tier so it's ready when user logs in
   fetch(`${API_URL}/auth/login`, { method: 'OPTIONS' }).catch(() => {});
 });
+
+async function handleForgotPassword() {
+  clearErrors();
+  const email = document.getElementById('forgot-email').value.trim();
+  if (!email) { showToast('Enter your email', true); return; }
+  const btn = document.getElementById('forgot-btn');
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+  try {
+    const res = await fetch(`${API_URL}/auth/forgot-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      showToast(data.message || 'Check your email / server logs');
+      document.getElementById('forgot-step-1').style.display = 'none';
+      document.getElementById('forgot-step-2').style.display = '';
+    } else {
+      showToast(data.error || 'Failed', true);
+    }
+  } catch (e) {
+    showToast('Server unavailable', true);
+  }
+  btn.disabled = false;
+  btn.textContent = 'Send Reset Code';
+}
+
+async function handleResetPassword() {
+  clearErrors();
+  const token = document.getElementById('reset-token').value.trim();
+  const newPassword = document.getElementById('reset-password').value;
+  if (!token || !newPassword) { showToast('Fill in both fields', true); return; }
+  if (newPassword.length < 6) { showToast('Password must be at least 6 characters', true); return; }
+  const btn = document.getElementById('reset-btn');
+  btn.disabled = true;
+  btn.textContent = 'Resetting...';
+  try {
+    const res = await fetch(`${API_URL}/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, newPassword })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      showToast(data.message || 'Password reset! Login now.');
+      switchTab('login');
+    } else {
+      showToast(data.error || 'Invalid or expired token', true);
+    }
+  } catch (e) {
+    showToast('Server unavailable', true);
+  }
+  btn.disabled = false;
+  btn.textContent = 'Reset Password';
+}
 </script>
 
 </body>
