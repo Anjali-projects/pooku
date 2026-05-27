@@ -48,42 +48,50 @@ function showToast(msg) {
 }
 
 // API CALLS
-async function apiCall(endpoint, method = 'GET', body = null) {
-  try {
-    const token = localStorage.getItem('token');
-    const options = {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+async function apiCall(endpoint, method = 'GET', body = null, retries = 2) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const token = localStorage.getItem('token');
+      const options = {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
+      };
+
+      if (body) {
+        options.body = JSON.stringify(body);
       }
-    };
 
-    if (body) {
-      options.body = JSON.stringify(body);
-    }
+      const response = await fetch(`${API_URL}${endpoint}`, options);
 
-    const response = await fetch(`${API_URL}${endpoint}`, options);
+      if (response.status === 401) {
+        logout();
+        return null;
+      }
 
-    if (response.status === 401) {
-      logout();
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        const msg = error.error || error.message || 'Something went wrong';
+        showToast(msg);
+        console.error('API Error:', error);
+        return null;
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error(`API call error (attempt ${attempt + 1}):`, error);
+      if (attempt < retries) {
+        setSyncStatus('loading');
+        showToast('Server is waking up... retrying');
+        await new Promise(r => setTimeout(r, 3000));
+        continue;
+      }
+      showToast('Unable to reach server. Please try again.');
+      setSyncStatus('error');
       return null;
     }
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      const msg = error.error || error.message || 'Something went wrong';
-      showToast(msg);
-      console.error('API Error:', error);
-      return null;
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error('API call error:', error);
-    showToast('Network error — check your connection');
-    setSyncStatus('error');
-    return null;
   }
 }
 

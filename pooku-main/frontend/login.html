@@ -408,41 +408,47 @@ async function handleLogin(event) {
   btn.disabled = true;
   btn.textContent = 'Logging in...';
 
-  try {
-    const response = await fetch(`${API_URL}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ username, password })
-    });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const response = await fetch(`${API_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
 
-    const data = await response.json();
+      const data = await response.json();
 
-    if (!response.ok) {
-      if (data.errors) {
-        data.errors.forEach(error => {
-          showError('login-' + error.param, error.msg);
-        });
+      if (!response.ok) {
+        if (data.errors) {
+          data.errors.forEach(error => {
+            showError('login-' + error.param, error.msg);
+          });
+        } else {
+          showToast(data.error || 'Login failed', true);
+        }
       } else {
-        showToast(data.error || 'Login failed', true);
+        localStorage.setItem('userId', data.userId);
+        localStorage.setItem('username', data.username);
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('authenticated', '1');
+        showToast('Login successful!');
+        setTimeout(() => {
+          window.location.href = 'tracker.html';
+        }, 500);
       }
-    } else {
-      localStorage.setItem('userId', data.userId);
-      localStorage.setItem('username', data.username);
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('authenticated', '1');
-      showToast('Login successful!');
-      setTimeout(() => {
-        window.location.href = 'tracker.html';
-      }, 500);
+      break;
+    } catch (error) {
+      console.error(`Login attempt ${attempt + 1} error:`, error);
+      if (attempt < 2) {
+        btn.textContent = 'Server waking up... retrying';
+        await new Promise(r => setTimeout(r, 3000));
+        continue;
+      }
+      showToast('Server is unavailable. Please try again in a moment.', true);
     }
-  } catch (error) {
-    console.error('Login error:', error);
-    showToast('Connection error. Unable to reach the server.', true);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Login';
   }
+  btn.disabled = false;
+  btn.textContent = 'Login';
 }
 
 async function handleRegister(event) {
@@ -473,41 +479,47 @@ async function handleRegister(event) {
   btn.disabled = true;
   btn.textContent = 'Creating account...';
 
-  try {
-    const response = await fetch(`${API_URL}/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ username, email, password })
-    });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const response = await fetch(`${API_URL}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, email, password })
+      });
 
-    const data = await response.json();
+      const data = await response.json();
 
-    if (!response.ok) {
-      if (data.errors) {
-        data.errors.forEach(error => {
-          showError('register-' + error.param, error.msg);
-        });
+      if (!response.ok) {
+        if (data.errors) {
+          data.errors.forEach(error => {
+            showError('register-' + error.param, error.msg);
+          });
+        } else {
+          showToast(data.error || 'Registration failed', true);
+        }
       } else {
-        showToast(data.error || 'Registration failed', true);
+        localStorage.setItem('userId', data.userId);
+        localStorage.setItem('username', data.username);
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('authenticated', '1');
+        showToast('Account created successfully!');
+        setTimeout(() => {
+          window.location.href = 'tracker.html';
+        }, 500);
       }
-    } else {
-      localStorage.setItem('userId', data.userId);
-      localStorage.setItem('username', data.username);
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('authenticated', '1');
-      showToast('Account created successfully!');
-      setTimeout(() => {
-        window.location.href = 'tracker.html';
-      }, 500);
+      break;
+    } catch (error) {
+      console.error(`Register attempt ${attempt + 1} error:`, error);
+      if (attempt < 2) {
+        btn.textContent = 'Server waking up... retrying';
+        await new Promise(r => setTimeout(r, 3000));
+        continue;
+      }
+      showToast('Server is unavailable. Please try again in a moment.', true);
     }
-  } catch (error) {
-    console.error('Register error:', error);
-    showToast('Connection error. Unable to reach the server.', true);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Create Account';
   }
+  btn.disabled = false;
+  btn.textContent = 'Create Account';
 }
 
 // Check if already logged in
@@ -515,6 +527,8 @@ window.addEventListener('load', () => {
   if (localStorage.getItem('authenticated')) {
     window.location.href = 'tracker.html';
   }
+  // Wake up backend on Render free tier so it's ready when user logs in
+  fetch(`${API_URL}/auth/login`, { method: 'OPTIONS' }).catch(() => {});
 });
 </script>
 
