@@ -50,12 +50,13 @@ function showToast(msg) {
 // API CALLS
 async function apiCall(endpoint, method = 'GET', body = null) {
   try {
+    const token = localStorage.getItem('token');
     const options = {
       method,
       headers: {
-        'Content-Type': 'application/json'
-      },
-      credentials: 'include'
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      }
     };
 
     if (body) {
@@ -470,11 +471,13 @@ function scheduleReminder(time) {
 
 window.logout = async function () {
   try {
-    await fetch(`${API_URL}/auth/logout`, { method: 'POST', credentials: 'include' });
+    const token = localStorage.getItem('token');
+    await fetch(`${API_URL}/auth/logout`, { method: 'POST', headers: token ? { 'Authorization': `Bearer ${token}` } : {} });
   } catch (e) { /* ignore */ }
   localStorage.removeItem('authenticated');
   localStorage.removeItem('userId');
   localStorage.removeItem('username');
+  localStorage.removeItem('token');
   window.location.href = 'login.html';
 };
 

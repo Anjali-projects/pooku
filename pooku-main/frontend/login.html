@@ -429,6 +429,7 @@ async function handleLogin(event) {
     } else {
       localStorage.setItem('userId', data.userId);
       localStorage.setItem('username', data.username);
+      localStorage.setItem('token', data.token);
       localStorage.setItem('authenticated', '1');
       showToast('Login successful!');
       setTimeout(() => {
@@ -493,6 +494,7 @@ async function handleRegister(event) {
     } else {
       localStorage.setItem('userId', data.userId);
       localStorage.setItem('username', data.username);
+      localStorage.setItem('token', data.token);
       localStorage.setItem('authenticated', '1');
       showToast('Account created successfully!');
       setTimeout(() => {
