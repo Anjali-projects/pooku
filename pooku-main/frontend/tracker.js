@@ -569,13 +569,18 @@ async function init() {
   showSkeleton('habits-list', 'habits');
 
   setSyncStatus('loading');
-  await loadHabits();
-  await loadTodayLog();
-  await loadAllLogs();
-  await loadStreaks();
-  await loadHabitNotes();
-  renderToday();
-  setSyncStatus('ok');
+  try {
+    await loadHabits();
+    await loadTodayLog();
+    await loadAllLogs();
+    await loadStreaks();
+    await loadHabitNotes();
+    renderToday();
+    setSyncStatus('ok');
+  } catch (e) {
+    console.error('Data load error:', e);
+    setSyncStatus('error');
+  }
 
   // Render badge strip on Today view
   renderBadgeStrip();
@@ -583,20 +588,21 @@ async function init() {
   renderAvatarDisplays();
 
   // Daily check-in & journal
-  doCheckIn();
+  doCheckIn().catch(e => console.error('Check-in error:', e));
   checkFloatingJournal();
   checkWeeklyReflection();
   // SSE for real-time chat
-  connectChatSSE();
+  try { connectChatSSE(); } catch(e) { console.error('Chat SSE error:', e); }
 
   document.getElementById('loading-screen').style.display = 'none';
   document.getElementById('app').style.display = '';
+
+  showOnboarding();
 
   initThemeColor();
   setupTypingIndicator();
   scheduleWeeklySummary();
   flushSyncQueue();
-  showOnboarding();
   showEveningSummary();
   checkStreakFreezeEarned();
 
